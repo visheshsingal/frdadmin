@@ -11,7 +11,6 @@ const Orders = ({ token }) => {
 
   const fetchAllOrders = async () => {
     if (!token) return null
-
     try {
       const response = await axios.post(backendUrl + '/api/order/list', {}, { headers: { token } })
       if (response.data.success) {
@@ -38,19 +37,45 @@ const Orders = ({ token }) => {
     }
   }
 
+  const cancelOrder = async (orderId, userEmail) => {
+    try {
+      const response = await axios.post(
+        backendUrl + '/api/order/cancel',
+        { orderId, userEmail },
+        { headers: { token } }
+      )
+
+      if (response.data.success) {
+        toast.success('Order cancelled successfully')
+        await fetchAllOrders()
+      } else {
+        toast.error(response.data.message)
+      }
+    } catch (error) {
+      toast.error(error.message)
+    }
+  }
+
   useEffect(() => {
     fetchAllOrders()
   }, [token])
 
   const filteredOrders = orders.filter((order) => {
-    const statusMatch =
-      filter === 'All' ||
-      order.status === filter
-    const dateMatch =
-      !dateFilter ||
-      new Date(order.date).toLocaleDateString('en-CA') === dateFilter
+    const statusMatch = filter === 'All' || order.status === filter
+    const dateMatch = !dateFilter || new Date(order.date).toLocaleDateString('en-CA') === dateFilter
     return statusMatch && dateMatch
   })
+
+  const calculateDiscountedAmount = (items) => {
+    let total = 0
+    for (let item of items) {
+      const price = item.price
+      const discount = item.discount || 0
+      const finalPrice = Math.round(price - (price * discount / 100))
+      total += finalPrice * item.quantity
+    }
+    return total
+  }
 
   return (
     <div className='bg-white p-4 rounded shadow'>
@@ -70,6 +95,7 @@ const Orders = ({ token }) => {
           <option value='Out for delivery'>Out for Delivery</option>
           <option value='Delivered'>Delivered (Fulfilled)</option>
           <option value='Top Priority'>Top Priority</option>
+          <option value='Cancelled'>Cancelled</option>
         </select>
 
         <input
@@ -96,73 +122,97 @@ const Orders = ({ token }) => {
           <p className='text-gray-500 text-center'>No orders found.</p>
         )}
 
-        {filteredOrders.map((order, index) => (
-          <div
-            key={index}
-            className='border rounded shadow-sm p-4 grid grid-cols-1 sm:grid-cols-[0.5fr_2fr_1fr] lg:grid-cols-[0.5fr_2fr_1fr_1fr_1fr] gap-3 items-start hover:bg-gray-50 transition'
-          >
-            <img
-              className='w-12 h-12 object-contain'
-              src={assets.parcel_icon}
-              alt='Parcel Icon'
-            />
+        {filteredOrders.map((order, index) => {
+          const actualTotal = calculateDiscountedAmount(order.items)
+          return (
+            <div
+              key={index}
+              className='border rounded shadow-sm p-4 grid grid-cols-1 sm:grid-cols-[0.5fr_2fr_1fr] lg:grid-cols-[0.5fr_2fr_1fr_1fr_1fr] gap-3 items-start hover:bg-gray-50 transition'
+            >
+              <img
+                className='w-12 h-12 object-contain'
+                src={assets.parcel_icon}
+                alt='Parcel Icon'
+              />
 
-            <div className='text-gray-700'>
-              <div>
-                {order.items.map((item, idx) => (
-                  <p className='py-0.5' key={idx}>
-                    {item.name} x {item.quantity}{' '}
-                    {item.size && <span>({item.size})</span>}
-                    {idx !== order.items.length - 1 && ','}
-                  </p>
-                ))}
-              </div>
-              <p className='mt-3 mb-2 font-semibold text-[#052659]'>
-                {order.address.firstName} {order.address.lastName}
-              </p>
-              <div className='text-xs'>
-                <p>{order.address.street},</p>
-                <p>
-                  {order.address.city}, {order.address.state},{' '}
-                  {order.address.country}, {order.address.zipcode}
+              <div className='text-gray-700'>
+                <div>
+                  {order.items.map((item, idx) => {
+                    const discounted = item.discount
+                      ? Math.round(item.price - (item.price * item.discount) / 100)
+                      : item.price
+                    return (
+                      <p className='py-0.5 text-sm' key={idx}>
+                        {item.name} x {item.quantity} {item.size && <span>({item.size})</span>} —{' '}
+                        {currency}
+                        <span className={`${item.discount ? 'line-through text-gray-400 mr-1' : ''}`}>
+                          {item.price}
+                        </span>
+                        {item.discount && (
+                          <span className='text-green-600 font-semibold'>{discounted}</span>
+                        )}
+                      </p>
+                    )
+                  })}
+                </div>
+                <p className='mt-3 mb-2 font-semibold text-[#052659]'>
+                  {order.address.firstName} {order.address.lastName}
                 </p>
-                <p>Phone: {order.address.phone}</p>
+                <div className='text-xs'>
+                  <p>{order.address.street},</p>
+                  <p>
+                    {order.address.city}, {order.address.state},{' '}
+                    {order.address.country}, {order.address.zipcode}
+                  </p>
+                  <p>Phone: {order.address.phone}</p>
+                  <p>Email: {order.address.email}</p>
+                </div>
+              </div>
+
+              <div className='text-gray-700 text-xs sm:text-sm'>
+                <p>Items: {order.items.length}</p>
+                <p>Method: {order.paymentMethod}</p>
+                <p>Payment: {order.payment ? 'Done' : 'Pending'}</p>
+                <p>Date: {new Date(order.date).toLocaleDateString('en-CA')}</p>
+              </div>
+
+              <div className='text-[#052659] font-semibold text-sm sm:text-base'>
+                <p>Total: {currency}{actualTotal}</p>
+                {actualTotal !== order.amount && (
+                  <p className='text-gray-500 text-xs line-through'>Was: {currency}{order.amount}</p>
+                )}
+              </div>
+
+              <div className='flex flex-col gap-2'>
+                {order.status !== 'Cancelled' ? (
+                  <>
+                    <select
+                      onChange={(event) => statusHandler(event, order._id)}
+                      value={order.status}
+                      className='p-2 border border-gray-300 rounded focus:ring-2 focus:ring-[#052659] text-xs sm:text-sm'
+                    >
+                      <option value='Order Placed'>Order Placed</option>
+                      <option value='Packing'>Packing</option>
+                      <option value='Shipped'>Shipped</option>
+                      <option value='Out for delivery'>Out for delivery</option>
+                      <option value='Delivered'>Delivered</option>
+                      <option value='Top Priority'>Top Priority</option>
+                    </select>
+
+                    <button
+                      onClick={() => cancelOrder(order._id, order.address.email)}
+                      className='p-2 bg-red-500 text-white rounded text-sm'
+                    >
+                      Cancel Order
+                    </button>
+                  </>
+                ) : (
+                  <span className='text-red-500 font-semibold'>Cancelled</span>
+                )}
               </div>
             </div>
-
-            <div className='text-gray-700 text-xs sm:text-sm'>
-              <p>Items: {order.items.length}</p>
-              <p>Method: {order.paymentMethod}</p>
-              <p>Payment: {order.payment ? 'Done' : 'Pending'}</p>
-              <p>
-                Date:{' '}
-                {new Date(order.date).toLocaleDateString('en-CA')}
-              </p>
-            </div>
-
-            {/* Amount, Status Dropdown */}
-            <div className='flex flex-col gap-2'>
-              <p className='text-[#052659] font-semibold text-sm sm:text-base'>
-                {currency}{order.amount}
-              </p>
-
-              <select
-                onChange={(event) => statusHandler(event, order._id)}
-                value={order.status}
-                className='p-2 border border-gray-300 rounded focus:ring-2 focus:ring-[#052659] text-xs sm:text-sm'
-              >
-                <option value='Order Placed'>Order Placed</option>
-                <option value='Packing'>Packing</option>
-                <option value='Shipped'>Shipped</option>
-                <option value='Out for delivery'>Out for delivery</option>
-                <option value='Delivered'>Delivered</option>
-                <option value='Top Priority'>Top Priority</option>
-              </select>
-
-            </div>
-
-          </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   )
