@@ -171,7 +171,7 @@ const Orders = ({ token }) => {
               </div>
 
               <div className='text-[#052659] font-semibold text-sm sm:text-base'>
-                <p>Total: {currency}{actualTotal}</p>
+                <p>Total: {currency}{actualTotal/10}</p>
                 {actualTotal !== order.amount && (
                   <p className='text-gray-500 text-xs line-through'>Was: {currency}{order.amount}</p>
                 )}
