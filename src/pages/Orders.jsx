@@ -1,41 +1,41 @@
-import React, { useEffect, useState } from 'react'
-import axios from 'axios'
-import { backendUrl, currency } from '../App'
-import { toast } from 'react-toastify'
-import { assets } from '../assets/assets'
+import React, { useEffect, useState } from 'react';
+import axios from 'axios';
+import { backendUrl, currency } from '../App';
+import { toast } from 'react-toastify';
+import { assets } from '../assets/assets';
 
 const Orders = ({ token }) => {
-  const [orders, setOrders] = useState([])
-  const [filter, setFilter] = useState('All')
-  const [dateFilter, setDateFilter] = useState('')
+  const [orders, setOrders] = useState([]);
+  const [filter, setFilter] = useState('All');
+  const [dateFilter, setDateFilter] = useState('');
 
   const fetchAllOrders = async () => {
-    if (!token) return null
+    if (!token) return null;
     try {
-      const response = await axios.post(backendUrl + '/api/order/list', {}, { headers: { token } })
+      const response = await axios.post(backendUrl + '/api/order/list', {}, { headers: { token } });
       if (response.data.success) {
-        setOrders(response.data.orders.reverse())
+        setOrders(response.data.orders.reverse());
       } else {
-        toast.error(response.data.message)
+        toast.error(response.data.message);
       }
     } catch (error) {
-      toast.error(error.message)
+      toast.error(error.message);
     }
-  }
+  };
 
   const statusHandler = async (event, orderId) => {
-    const newStatus = event.target.value
+    const newStatus = event.target.value;
     try {
       await axios.post(
         backendUrl + '/api/order/status',
         { orderId, status: newStatus },
         { headers: { token } }
-      )
-      await fetchAllOrders()
+      );
+      await fetchAllOrders();
     } catch (error) {
-      toast.error(error.message)
+      toast.error(error.message);
     }
-  }
+  };
 
   const cancelOrder = async (orderId, userEmail) => {
     try {
@@ -43,39 +43,39 @@ const Orders = ({ token }) => {
         backendUrl + '/api/order/cancel',
         { orderId, userEmail },
         { headers: { token } }
-      )
+      );
 
       if (response.data.success) {
-        toast.success('Order cancelled successfully')
-        await fetchAllOrders()
+        toast.success('Order cancelled successfully');
+        await fetchAllOrders();
       } else {
-        toast.error(response.data.message)
+        toast.error(response.data.message);
       }
     } catch (error) {
-      toast.error(error.message)
+      toast.error(error.message);
     }
-  }
+  };
 
   useEffect(() => {
-    fetchAllOrders()
-  }, [token])
+    fetchAllOrders();
+  }, [token]);
 
   const filteredOrders = orders.filter((order) => {
-    const statusMatch = filter === 'All' || order.status === filter
-    const dateMatch = !dateFilter || new Date(order.date).toLocaleDateString('en-CA') === dateFilter
-    return statusMatch && dateMatch
-  })
+    const statusMatch = filter === 'All' || order.status === filter;
+    const dateMatch = !dateFilter || new Date(order.date).toLocaleDateString('en-CA') === dateFilter;
+    return statusMatch && dateMatch;
+  });
 
   const calculateDiscountedAmount = (items) => {
-    let total = 0
+    let total = 0;
     for (let item of items) {
-      const price = item.price
-      const discount = item.discount || 0
-      const finalPrice = Math.round(price - (price * discount / 100))
-      total += finalPrice * item.quantity
+      const actualPrice = item.price / 10; // TEMP FIX
+      const discount = item.discount || 0;
+      const finalPrice = Math.round(actualPrice - (actualPrice * discount) / 100);
+      total += finalPrice * item.quantity;
     }
-    return total
-  }
+    return total;
+  };
 
   return (
     <div className='bg-white p-4 rounded shadow'>
@@ -107,8 +107,8 @@ const Orders = ({ token }) => {
 
         <button
           onClick={() => {
-            setFilter('All')
-            setDateFilter('')
+            setFilter('All');
+            setDateFilter('');
           }}
           className='p-2 bg-[#052659] text-white rounded text-sm'
         >
@@ -123,7 +123,7 @@ const Orders = ({ token }) => {
         )}
 
         {filteredOrders.map((order, index) => {
-          const actualTotal = calculateDiscountedAmount(order.items)
+          const actualTotal = calculateDiscountedAmount(order.items);
           return (
             <div
               key={index}
@@ -138,21 +138,23 @@ const Orders = ({ token }) => {
               <div className='text-gray-700'>
                 <div>
                   {order.items.map((item, idx) => {
+                    const displayPrice = item.price / 10; // TEMP FIX
                     const discounted = item.discount
-                      ? Math.round(item.price - (item.price * item.discount) / 100)
-                      : item.price
+                      ? Math.round(displayPrice - (displayPrice * item.discount) / 100)
+                      : displayPrice;
+
                     return (
                       <p className='py-0.5 text-sm' key={idx}>
                         {item.name} x {item.quantity} {item.size && <span>({item.size})</span>} —{' '}
                         {currency}
                         <span className={`${item.discount ? 'line-through text-gray-400 mr-1' : ''}`}>
-                          {item.price}
+                          {displayPrice}
                         </span>
                         {item.discount && (
                           <span className='text-green-600 font-semibold'>{discounted}</span>
                         )}
                       </p>
-                    )
+                    );
                   })}
                 </div>
                 <p className='mt-3 mb-2 font-semibold text-[#052659]'>
@@ -211,11 +213,11 @@ const Orders = ({ token }) => {
                 )}
               </div>
             </div>
-          )
+          );
         })}
       </div>
     </div>
-  )
-}
+  );
+};
 
-export default Orders
+export default Orders;
