@@ -69,7 +69,7 @@ const Orders = ({ token }) => {
   const calculateDiscountedAmount = (items) => {
     let total = 0;
     for (let item of items) {
-      const actualPrice = item.price / 10; // TEMP FIX
+      const actualPrice = item.price; // TEMP FIX
       const discount = item.discount || 0;
       const finalPrice = Math.round(actualPrice - (actualPrice * discount) / 100);
       total += finalPrice * item.quantity;
