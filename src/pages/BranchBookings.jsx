@@ -3,7 +3,7 @@ import axios from 'axios'
 import { toast } from 'react-toastify'
 
 // Assume backendUrl is imported or defined elsewhere in your project
-const backendUrl = "http://localhost:4000";
+const backendUrl = "https://frdbackend.onrender.com";
 
 const BranchBookings = ({ token }) => {
     // Original state for fetching all bookings and gym name
