@@ -1,38 +1,39 @@
-import axios from 'axios'
-import React, { useState } from 'react'
-import { backendUrl } from '../App'
-import { toast } from 'react-toastify'
+import axios from 'axios';
+import React, { useState } from 'react';
+import { backendUrl } from '../App';
+import { toast } from 'react-toastify';
 
 const Login = ({ setToken }) => {
-    const [email, setEmail] = useState('frdgym@gmail.com')
-    const [password, setPassword] = useState('')
-    const [role, setRole] = useState('admin')
-    const [loading, setLoading] = useState(false)
+    const [email, setEmail] = useState('frdgym@gmail.com');
+    const [password, setPassword] = useState('');
+    const [role, setRole] = useState('admin');
+    const [loading, setLoading] = useState(false);
+    const [showPassword, setShowPassword] = useState(false); // New state for password visibility
 
     const onSubmitHandler = async (e) => {
         e.preventDefault();
-        setLoading(true)
-        
+        setLoading(true);
+
         try {
-            const payload = { email, password, role }
-            const response = await axios.post(backendUrl + '/api/user/admin', payload)
+            const payload = { email, password, role };
+            const response = await axios.post(backendUrl + '/api/user/admin', payload);
             if (response.data.success) {
-                setToken(response.data.token)
-                toast.success('Login successful!')
+                setToken(response.data.token);
+                toast.success('Login successful!');
             } else {
-                toast.error(response.data.message)
+                toast.error(response.data.message);
             }
         } catch (error) {
             console.log(error);
-            toast.error(error.response?.data?.message || error.message)
+            toast.error(error.response?.data?.message || error.message);
         } finally {
-            setLoading(false)
+            setLoading(false);
         }
-    }
+    };
 
     const handleRoleChange = (newRole) => {
-        setRole(newRole)
-    }
+        setRole(newRole);
+    };
 
     return (
         <div className='min-h-screen flex items-center justify-center w-full bg-white'>
@@ -40,7 +41,7 @@ const Login = ({ setToken }) => {
                 <h1 className='text-2xl font-bold mb-4 text-[#052659] text-center'>
                     {role === 'admin' ? 'Admin Panel' : 'Branch Portal'}
                 </h1>
-                
+
                 <form onSubmit={onSubmitHandler}>
                     <div className='mb-4'>
                         <p className='text-sm font-medium text-gray-700 mb-2'>Select Role</p>
@@ -86,14 +87,23 @@ const Login = ({ setToken }) => {
 
                     <div className='mb-3'>
                         <p className='text-sm font-medium text-gray-700 mb-2'>Password</p>
-                        <input
-                            onChange={(e) => setPassword(e.target.value)}
-                            value={password}
-                            className='rounded-md w-full px-3 py-2 border border-gray-300 outline-none focus:ring-2 focus:ring-[#052659]'
-                            type="password"
-                            placeholder={role === 'admin' ? 'Admin password' : 'Branch password'}
-                            required
-                        />
+                        <div className='relative'>
+                            <input
+                                onChange={(e) => setPassword(e.target.value)}
+                                value={password}
+                                className='rounded-md w-full px-3 py-2 pr-10 border border-gray-300 outline-none focus:ring-2 focus:ring-[#052659]'
+                                type={showPassword ? 'text' : 'password'} // Toggles input type
+                                placeholder={role === 'admin' ? 'Admin password' : 'Branch password'}
+                                required
+                            />
+                            <button
+                                type='button'
+                                onClick={() => setShowPassword(!showPassword)} // Toggles showPassword state
+                                className='absolute inset-y-0 right-0 px-3 flex items-center text-sm leading-5'
+                            >
+                                {showPassword ? 'Hide' : 'Show'}
+                            </button>
+                        </div>
                     </div>
 
                     <button
@@ -106,7 +116,7 @@ const Login = ({ setToken }) => {
                 </form>
             </div>
         </div>
-          )
-  }
- 
-export default Login
+    );
+};
+
+export default Login;
