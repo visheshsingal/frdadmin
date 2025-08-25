@@ -61,7 +61,8 @@ const Bookings = ({ token }) => {
 				b.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
 				b.phone.includes(searchTerm) ||
 				b.gym.toLowerCase().includes(searchTerm.toLowerCase()) ||
-				b.facility.toLowerCase().includes(searchTerm.toLowerCase())
+				b.facility.toLowerCase().includes(searchTerm.toLowerCase()) ||
+				b.timeSlot.toLowerCase().includes(searchTerm.toLowerCase())
 			return gymOk && facilityOk && searchOk
 		})
 	}, [bookings, gymFilter, facilityFilter, searchTerm])
@@ -77,6 +78,17 @@ const Bookings = ({ token }) => {
 		const filteredCount = filtered.length
 		return { total, filtered: filteredCount }
 	}
+
+	// Format booking date for display
+	const formatBookingDate = (dateString) => {
+		const date = new Date(dateString);
+		return date.toLocaleDateString('en-US', {
+			weekday: 'short',
+			year: 'numeric',
+			month: 'short',
+			day: 'numeric'
+		});
+	};
 
 	const stats = getFilterStats()
 
@@ -130,7 +142,7 @@ const Bookings = ({ token }) => {
 							type='text'
 							value={searchTerm}
 							onChange={(e) => setSearchTerm(e.target.value)}
-							placeholder='Search by name, email, phone...'
+							placeholder='Search by name, email, phone, time slot...'
 							className='w-full p-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
 						/>
 					</div>
@@ -179,18 +191,20 @@ const Bookings = ({ token }) => {
 					<table className='min-w-full text-sm'>
 						<thead>
 							<tr className='text-left border-b-2 border-gray-200'>
-								<th className='p-3 font-semibold text-gray-700'>Date & Time</th>
+								<th className='p-3 font-semibold text-gray-700'>Booking Date</th>
+								<th className='p-3 font-semibold text-gray-700'>Time Slot</th>
 								<th className='p-3 font-semibold text-gray-700'>Gym Branch</th>
 								<th className='p-3 font-semibold text-gray-700'>Facility</th>
 								<th className='p-3 font-semibold text-gray-700'>Customer Name</th>
 								<th className='p-3 font-semibold text-gray-700'>Email</th>
 								<th className='p-3 font-semibold text-gray-700'>Phone</th>
+								<th className='p-3 font-semibold text-gray-700'>Status</th>
 							</tr>
 						</thead>
 						<tbody>
 							{filtered.length === 0 ? (
 								<tr>
-									<td className='p-8 text-center text-gray-500' colSpan={6}>
+									<td className='p-8 text-center text-gray-500' colSpan={8}>
 										{bookings.length === 0 ? 'No bookings found.' : 'No bookings match your filters.'}
 									</td>
 								</tr>
@@ -198,9 +212,12 @@ const Bookings = ({ token }) => {
 								filtered.map((b) => (
 									<tr key={b._id} className='border-b hover:bg-gray-50 transition-colors'>
 										<td className='p-3'>
-											<div className='font-medium'>{new Date(b.createdAt).toLocaleDateString()}</div>
-											<div className='text-xs text-gray-500'>{new Date(b.createdAt).toLocaleTimeString()}</div>
+											<div className='font-medium'>{formatBookingDate(b.date)}</div>
+											<div className='text-xs text-gray-500'>
+												Booked on: {new Date(b.createdAt).toLocaleDateString()}
+											</div>
 										</td>
+										<td className='p-3 font-medium text-blue-700'>{b.timeSlot}</td>
 										<td className='p-3 font-medium text-[#052659]'>{b.gym}</td>
 										<td className='p-3'>
 											<span className='px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full'>
@@ -210,6 +227,15 @@ const Bookings = ({ token }) => {
 										<td className='p-3 font-medium'>{b.name}</td>
 										<td className='p-3 text-blue-600'>{b.email}</td>
 										<td className='p-3 font-mono'>{b.phone}</td>
+										<td className='p-3'>
+											<span className={`px-2 py-1 text-xs rounded-full ${
+												b.status === 'cancelled' 
+													? 'bg-red-100 text-red-800' 
+													: 'bg-green-100 text-green-800'
+											}`}>
+												{b.status || 'confirmed'}
+											</span>
+										</td>
 									</tr>
 								))
 							)}
@@ -221,4 +247,4 @@ const Bookings = ({ token }) => {
 	)
 }
 
-export default Bookings 
+export default Bookings

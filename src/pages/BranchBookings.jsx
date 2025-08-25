@@ -6,22 +6,20 @@ import { toast } from 'react-toastify'
 const backendUrl = "https://frdbackend.onrender.com";
 
 const BranchBookings = ({ token }) => {
-    // Original state for fetching all bookings and gym name
     const [bookings, setBookings] = useState([]);
     const [gymName, setGymName] = useState('');
     const [loading, setLoading] = useState(false);
+    const [cancelingId, setCancelingId] = useState(null); // Track which booking is being canceled
 
-    // New state for filters and filtered data
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedFacility, setSelectedFacility] = useState('');
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
     const [filteredBookings, setFilteredBookings] = useState([]);
 
-    // State to hold unique facilities for the dropdown filter
     const [facilities, setFacilities] = useState([]);
 
-    // Function to fetch all bookings from the backend
+    // Fetch bookings
     const fetchBranchBookings = async () => {
         if (!token) return;
         setLoading(true);
@@ -31,10 +29,9 @@ const BranchBookings = ({ token }) => {
             });
             if (response.data.success) {
                 setBookings(response.data.bookings);
-                setFilteredBookings(response.data.bookings); // Initialize filtered bookings with all bookings
+                setFilteredBookings(response.data.bookings);
                 setGymName(response.data.gym);
 
-                // Extract unique facilities to populate the filter dropdown
                 const uniqueFacilities = [...new Set(response.data.bookings.map(b => b.facility))];
                 setFacilities(uniqueFacilities);
             } else {
@@ -48,34 +45,31 @@ const BranchBookings = ({ token }) => {
         }
     };
 
-    // Effect to fetch bookings when the token changes
     useEffect(() => {
         fetchBranchBookings();
     }, [token]);
 
-    // Effect to handle filtering whenever filter states or bookings change
+    // Filter bookings whenever filters change
     useEffect(() => {
         let updatedBookings = [...bookings];
 
-        // 1. Filter by Search Term (Name, Email, or Phone)
         if (searchTerm) {
             const lowercasedSearchTerm = searchTerm.toLowerCase();
             updatedBookings = updatedBookings.filter(b =>
                 b.name.toLowerCase().includes(lowercasedSearchTerm) ||
                 b.email.toLowerCase().includes(lowercasedSearchTerm) ||
-                (b.phone && b.phone.toLowerCase().includes(lowercasedSearchTerm))
+                (b.phone && b.phone.toLowerCase().includes(lowercasedSearchTerm)) ||
+                b.timeSlot.toLowerCase().includes(lowercasedSearchTerm)
             );
         }
 
-        // 2. Filter by Facility
         if (selectedFacility) {
             updatedBookings = updatedBookings.filter(b => b.facility === selectedFacility);
         }
 
-        // 3. Filter by Date Range
         if (startDate || endDate) {
             updatedBookings = updatedBookings.filter(b => {
-                const bookingDate = new Date(b.createdAt);
+                const bookingDate = new Date(b.date);
                 const start = startDate ? new Date(startDate) : null;
                 const end = endDate ? new Date(endDate) : null;
 
@@ -89,16 +83,73 @@ const BranchBookings = ({ token }) => {
                 return true;
             });
         }
-        
+
         setFilteredBookings(updatedBookings);
     }, [bookings, searchTerm, selectedFacility, startDate, endDate]);
 
-    // Function to clear all filters
     const clearFilters = () => {
         setSearchTerm('');
         setSelectedFacility('');
         setStartDate('');
         setEndDate('');
+        setFilteredBookings(bookings);
+    };
+
+    // Today's Bookings function
+    const showTodaysBookings = () => {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+
+        const todays = bookings.filter(b => {
+            const bookingDate = new Date(b.date);
+            return bookingDate >= today && bookingDate < tomorrow;
+        });
+
+        setFilteredBookings(todays);
+    };
+
+    // Cancel booking function
+    const cancelBooking = async (bookingId, customerEmail, customerName) => {
+        if (!window.confirm(`Are you sure you want to cancel this booking for ${customerName}? An email will be sent to ${customerEmail}.`)) {
+            return;
+        }
+
+        setCancelingId(bookingId);
+        try {
+            const response = await axios.post(
+                `${backendUrl}/api/bookings/cancel/${bookingId}`,
+                {},
+                {
+                    headers: { token }
+                }
+            );
+
+            if (response.data.success) {
+                toast.success('Booking canceled successfully and email sent to customer');
+                // Refresh the bookings list
+                fetchBranchBookings();
+            } else {
+                toast.error(response.data.message);
+            }
+        } catch (error) {
+            console.error('Error canceling booking:', error);
+            toast.error(error.response?.data?.message || 'Failed to cancel booking');
+        } finally {
+            setCancelingId(null);
+        }
+    };
+
+    // Format date for display
+    const formatBookingDate = (dateString) => {
+        const date = new Date(dateString);
+        return date.toLocaleDateString('en-US', {
+            weekday: 'short',
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric'
+        });
     };
 
     return (
@@ -117,16 +168,14 @@ const BranchBookings = ({ token }) => {
 
             {/* Filter Controls */}
             <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6'>
-                {/* Search Input */}
                 <input
                     type='text'
-                    placeholder='Search by name, email, or phone...'
+                    placeholder='Search by name, email, phone, or time slot...'
                     className='p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#052659]'
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                 />
 
-                {/* Facility Filter */}
                 <select
                     className='p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#052659]'
                     value={selectedFacility}
@@ -138,23 +187,32 @@ const BranchBookings = ({ token }) => {
                     ))}
                 </select>
 
-                {/* Start Date Filter */}
                 <input
                     type='date'
                     className='p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#052659]'
                     value={startDate}
                     onChange={(e) => setStartDate(e.target.value)}
+                    placeholder='From Date'
                 />
 
-                {/* End Date Filter */}
                 <input
                     type='date'
                     className='p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#052659]'
                     value={endDate}
                     onChange={(e) => setEndDate(e.target.value)}
+                    placeholder='To Date'
                 />
+            </div>
 
-                {/* Clear Filters Button */}
+            {/* Extra Buttons */}
+            <div className='flex gap-2 mb-6'>
+                <button
+                    className='bg-[#052659] text-white font-semibold py-2 px-4 rounded-md hover:bg-[#07377a] transition-colors'
+                    onClick={showTodaysBookings}
+                >
+                    Today's Bookings
+                </button>
+
                 {(searchTerm || selectedFacility || startDate || endDate) && (
                     <button
                         className='bg-gray-200 text-gray-700 font-semibold py-2 px-4 rounded-md hover:bg-gray-300 transition-colors'
@@ -176,17 +234,20 @@ const BranchBookings = ({ token }) => {
                     <table className='min-w-full text-sm'>
                         <thead>
                             <tr className='text-left border-b-2 border-gray-200'>
-                                <th className='p-3 font-semibold text-gray-700'>Date & Time</th>
+                                <th className='p-3 font-semibold text-gray-700'>Booking Date</th>
+                                <th className='p-3 font-semibold text-gray-700'>Time Slot</th>
                                 <th className='p-3 font-semibold text-gray-700'>Facility</th>
                                 <th className='p-3 font-semibold text-gray-700'>Customer Name</th>
                                 <th className='p-3 font-semibold text-gray-700'>Email</th>
                                 <th className='p-3 font-semibold text-gray-700'>Phone</th>
+                                <th className='p-3 font-semibold text-gray-700'>Status</th>
+                                <th className='p-3 font-semibold text-gray-700'>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
                             {filteredBookings.length === 0 ? (
                                 <tr>
-                                    <td className='p-8 text-center text-gray-500' colSpan={5}>
+                                    <td className='p-8 text-center text-gray-500' colSpan={8}>
                                         No bookings found with the current filters.
                                     </td>
                                 </tr>
@@ -194,9 +255,12 @@ const BranchBookings = ({ token }) => {
                                 filteredBookings.map((b) => (
                                     <tr key={b._id} className='border-b hover:bg-gray-50 transition-colors'>
                                         <td className='p-3'>
-                                            <div className='font-medium'>{new Date(b.createdAt).toLocaleDateString()}</div>
-                                            <div className='text-xs text-gray-500'>{new Date(b.createdAt).toLocaleTimeString()}</div>
+                                            <div className='font-medium'>{formatBookingDate(b.date)}</div>
+                                            <div className='text-xs text-gray-500'>
+                                                Booked on: {new Date(b.createdAt).toLocaleDateString()}
+                                            </div>
                                         </td>
+                                        <td className='p-3 font-medium text-blue-700'>{b.timeSlot}</td>
                                         <td className='p-3'>
                                             <span className='px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full'>
                                                 {b.facility}
@@ -205,6 +269,30 @@ const BranchBookings = ({ token }) => {
                                         <td className='p-3 font-medium'>{b.name}</td>
                                         <td className='p-3 text-blue-600'>{b.email}</td>
                                         <td className='p-3 font-mono'>{b.phone}</td>
+                                        <td className='p-3'>
+                                            <span className={`px-2 py-1 text-xs rounded-full ${
+                                                b.status === 'cancelled' 
+                                                    ? 'bg-red-100 text-red-800' 
+                                                    : 'bg-green-100 text-green-800'
+                                            }`}>
+                                                {b.status || 'confirmed'}
+                                            </span>
+                                        </td>
+                                        <td className='p-3'>
+                                            {b.status !== 'cancelled' && (
+                                                <button
+                                                    onClick={() => cancelBooking(b._id, b.email, b.name)}
+                                                    disabled={cancelingId === b._id}
+                                                    className={`px-3 py-1 text-xs rounded-md ${
+                                                        cancelingId === b._id 
+                                                            ? 'bg-gray-400 cursor-not-allowed' 
+                                                            : 'bg-red-600 hover:bg-red-700 text-white'
+                                                    }`}
+                                                >
+                                                    {cancelingId === b._id ? 'Canceling...' : 'Cancel'}
+                                                </button>
+                                            )}
+                                        </td>
                                     </tr>
                                 ))
                             )}
