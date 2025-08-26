@@ -9,15 +9,14 @@ const BranchBookings = ({ token }) => {
     const [bookings, setBookings] = useState([]);
     const [gymName, setGymName] = useState('');
     const [loading, setLoading] = useState(false);
-    const [cancelingId, setCancelingId] = useState(null); // Track which booking is being canceled
-
+    const [cancelingId, setCancelingId] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedFacility, setSelectedFacility] = useState('');
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
     const [filteredBookings, setFilteredBookings] = useState([]);
-
     const [facilities, setFacilities] = useState([]);
+    const [showTodaysBookings, setShowTodaysBookings] = useState(false);
 
     // Fetch bookings
     const fetchBranchBookings = async () => {
@@ -49,9 +48,27 @@ const BranchBookings = ({ token }) => {
         fetchBranchBookings();
     }, [token]);
 
+    // Today's Bookings function
+    const filterTodaysBookings = () => {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+
+        return bookings.filter(b => {
+            const bookingDate = new Date(b.date);
+            return bookingDate >= today && bookingDate < tomorrow;
+        });
+    };
+
     // Filter bookings whenever filters change
     useEffect(() => {
         let updatedBookings = [...bookings];
+
+        // Apply today's filter if enabled
+        if (showTodaysBookings) {
+            updatedBookings = filterTodaysBookings();
+        }
 
         if (searchTerm) {
             const lowercasedSearchTerm = searchTerm.toLowerCase();
@@ -85,29 +102,15 @@ const BranchBookings = ({ token }) => {
         }
 
         setFilteredBookings(updatedBookings);
-    }, [bookings, searchTerm, selectedFacility, startDate, endDate]);
+    }, [bookings, searchTerm, selectedFacility, startDate, endDate, showTodaysBookings]);
 
     const clearFilters = () => {
         setSearchTerm('');
         setSelectedFacility('');
         setStartDate('');
         setEndDate('');
+        setShowTodaysBookings(false);
         setFilteredBookings(bookings);
-    };
-
-    // Today's Bookings function
-    const showTodaysBookings = () => {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const tomorrow = new Date(today);
-        tomorrow.setDate(tomorrow.getDate() + 1);
-
-        const todays = bookings.filter(b => {
-            const bookingDate = new Date(b.date);
-            return bookingDate >= today && bookingDate < tomorrow;
-        });
-
-        setFilteredBookings(todays);
     };
 
     // Cancel booking function
@@ -207,13 +210,17 @@ const BranchBookings = ({ token }) => {
             {/* Extra Buttons */}
             <div className='flex gap-2 mb-6'>
                 <button
-                    className='bg-[#052659] text-white font-semibold py-2 px-4 rounded-md hover:bg-[#07377a] transition-colors'
-                    onClick={showTodaysBookings}
+                    onClick={() => setShowTodaysBookings(!showTodaysBookings)}
+                    className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                        showTodaysBookings 
+                            ? 'bg-[#052659] text-white hover:bg-[#07377a]' 
+                            : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }`}
                 >
-                    Today's Bookings
+                    {showTodaysBookings ? 'Show All Bookings' : "Today's Bookings"}
                 </button>
 
-                {(searchTerm || selectedFacility || startDate || endDate) && (
+                {(searchTerm || selectedFacility || startDate || endDate || showTodaysBookings) && (
                     <button
                         className='bg-gray-200 text-gray-700 font-semibold py-2 px-4 rounded-md hover:bg-gray-300 transition-colors'
                         onClick={clearFilters}
@@ -222,6 +229,38 @@ const BranchBookings = ({ token }) => {
                     </button>
                 )}
             </div>
+
+            {/* Active Filters Display */}
+            {(searchTerm || selectedFacility || startDate || endDate || showTodaysBookings) && (
+                <div className='flex flex-wrap gap-2 mb-4'>
+                    <span className='text-sm text-gray-600'>Active filters:</span>
+                    {showTodaysBookings && (
+                        <span className='px-2 py-1 bg-purple-100 text-purple-800 text-xs rounded-full'>
+                            Today's Bookings
+                        </span>
+                    )}
+                    {selectedFacility && (
+                        <span className='px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full'>
+                            Facility: {selectedFacility}
+                        </span>
+                    )}
+                    {startDate && (
+                        <span className='px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full'>
+                            From: {new Date(startDate).toLocaleDateString()}
+                        </span>
+                    )}
+                    {endDate && (
+                        <span className='px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full'>
+                            To: {new Date(endDate).toLocaleDateString()}
+                        </span>
+                    )}
+                    {searchTerm && (
+                        <span className='px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded-full'>
+                            Search: "{searchTerm}"
+                        </span>
+                    )}
+                </div>
+            )}
 
             {/* Bookings Table */}
             <div className='overflow-x-auto'>

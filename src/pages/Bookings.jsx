@@ -10,6 +10,7 @@ const Bookings = ({ token }) => {
 	const [facilityFilter, setFacilityFilter] = useState('All')
 	const [searchTerm, setSearchTerm] = useState('')
 	const [loading, setLoading] = useState(false)
+	const [showTodaysBookings, setShowTodaysBookings] = useState(false)
 
 	const facilities = [
 		"Workout Sessions (Strength Training, Cardio, Group Classes)",
@@ -52,8 +53,31 @@ const Bookings = ({ token }) => {
 		fetchBookings() 
 	}, [token])
 
+	// Today's Bookings function
+	const filterTodaysBookings = () => {
+		const today = new Date();
+		today.setHours(0, 0, 0, 0);
+		const tomorrow = new Date(today);
+		tomorrow.setDate(tomorrow.getDate() + 1);
+
+		const todays = bookings.filter(b => {
+			const bookingDate = new Date(b.date);
+			return bookingDate >= today && bookingDate < tomorrow;
+		});
+
+		return todays;
+	};
+
 	const filtered = useMemo(() => {
-		return bookings.filter(b => {
+		let result = bookings;
+		
+		// Apply today's filter first if enabled
+		if (showTodaysBookings) {
+			result = filterTodaysBookings();
+		}
+		
+		// Then apply other filters
+		return result.filter(b => {
 			const gymOk = gymFilter === 'All' || b.gym === gymFilter
 			const facilityOk = facilityFilter === 'All' || b.facility === facilityFilter
 			const searchOk = !searchTerm || 
@@ -65,12 +89,13 @@ const Bookings = ({ token }) => {
 				b.timeSlot.toLowerCase().includes(searchTerm.toLowerCase())
 			return gymOk && facilityOk && searchOk
 		})
-	}, [bookings, gymFilter, facilityFilter, searchTerm])
+	}, [bookings, gymFilter, facilityFilter, searchTerm, showTodaysBookings])
 
 	const clearFilters = () => {
 		setGymFilter('All')
 		setFacilityFilter('All')
 		setSearchTerm('')
+		setShowTodaysBookings(false)
 	}
 
 	const getFilterStats = () => {
@@ -157,10 +182,29 @@ const Bookings = ({ token }) => {
 					</div>
 				</div>
 
+				{/* Extra Buttons */}
+				<div className='flex gap-2 mb-4'>
+					<button
+						onClick={() => setShowTodaysBookings(!showTodaysBookings)}
+						className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+							showTodaysBookings 
+								? 'bg-[#052659] text-white hover:bg-[#07377a]' 
+								: 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+						}`}
+					>
+						{showTodaysBookings ? 'Show All Bookings' : "Today's Bookings"}
+					</button>
+				</div>
+
 				{/* Active Filters Display */}
-				{(gymFilter !== 'All' || facilityFilter !== 'All' || searchTerm) && (
+				{(gymFilter !== 'All' || facilityFilter !== 'All' || searchTerm || showTodaysBookings) && (
 					<div className='flex flex-wrap gap-2'>
 						<span className='text-sm text-gray-600'>Active filters:</span>
+						{showTodaysBookings && (
+							<span className='px-2 py-1 bg-purple-100 text-purple-800 text-xs rounded-full'>
+								Today's Bookings
+							</span>
+						)}
 						{gymFilter !== 'All' && (
 							<span className='px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full'>
 								Gym: {gymFilter}
