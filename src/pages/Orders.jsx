@@ -8,18 +8,62 @@ const Orders = ({ token }) => {
   const [orders, setOrders] = useState([])
   const [filter, setFilter] = useState('All')
   const [dateFilter, setDateFilter] = useState('')
+  const [productImages, setProductImages] = useState({}) // Store product images by ID
 
   const fetchAllOrders = async () => {
     if (!token) return null
     try {
       const response = await axios.post(backendUrl + '/api/order/list', {}, { headers: { token } })
       if (response.data.success) {
-        setOrders(response.data.orders.reverse())
+        const ordersData = response.data.orders.reverse()
+        setOrders(ordersData)
+        
+        // Extract all unique product IDs to fetch their images
+        const productIds = [];
+        ordersData.forEach(order => {
+          order.items.forEach(item => {
+            if (item.id && !productIds.includes(item.id)) {
+              productIds.push(item.id);
+            }
+          });
+        });
+        
+        // Fetch product images for all products in orders
+        if (productIds.length > 0) {
+          fetchProductImages(productIds);
+        }
       } else {
         toast.error(response.data.message)
       }
     } catch (error) {
       toast.error(error.message)
+    }
+  }
+
+  const fetchProductImages = async (productIds) => {
+    try {
+      const imagesMap = {};
+      // Fetch each product's details to get the image
+      for (const productId of productIds) {
+        try {
+          const response = await axios.post(backendUrl + '/api/product/single', { 
+            productId 
+          }, { headers: { token } });
+          
+          if (response.data.success && response.data.product) {
+            const product = response.data.product;
+            // Use the first image if available
+            if (product.image && product.image.length > 0) {
+              imagesMap[productId] = Array.isArray(product.image) ? product.image[0] : product.image;
+            }
+          }
+        } catch (error) {
+          console.error(`Error fetching product ${productId}:`, error);
+        }
+      }
+      setProductImages(imagesMap);
+    } catch (error) {
+      console.error('Error fetching product images:', error);
     }
   }
 
@@ -72,9 +116,23 @@ const Orders = ({ token }) => {
       const price = item.price
       const discount = item.discount || 0
       const finalPrice = Math.round(price - (price * discount / 100))
-      total += finalPrice * item.quantity * 10;
+      total += finalPrice * item.quantity
     }
     return total
+  }
+
+  // Get image for a product
+  const getProductImage = (item) => {
+    // First try to get from productImages map
+    if (item.id && productImages[item.id]) {
+      return productImages[item.id];
+    }
+    // Then try item.image directly
+    if (item.image) {
+      return Array.isArray(item.image) ? item.image[0] : item.image;
+    }
+    // Fallback to placeholder
+    return 'https://via.placeholder.com/60x60?text=No+Image';
   }
 
   return (
@@ -127,53 +185,88 @@ const Orders = ({ token }) => {
           return (
             <div
               key={index}
-              className='border rounded shadow-sm p-4 grid grid-cols-1 sm:grid-cols-[0.5fr_2fr_1fr] lg:grid-cols-[0.5fr_2fr_1fr_1fr_1fr] gap-3 items-start hover:bg-gray-50 transition'
+              className='border rounded shadow-sm p-4 grid grid-cols-1 sm:grid-cols-[auto_2fr_1fr] lg:grid-cols-[auto_2fr_1fr_1fr_1fr] gap-4 items-start hover:bg-gray-50 transition'
             >
-              <img
-                className='w-12 h-12 object-contain'
-                src={assets.parcel_icon}
-                alt='Parcel Icon'
-              />
+              {/* Product Images */}
+              <div className='flex flex-col gap-2 min-w-[80px]'>
+                {order.items.map((item, idx) => (
+                  <img
+                    key={idx}
+                    className='w-16 h-16 object-contain rounded border p-1 bg-white'
+                    src={getProductImage(item)}
+                    alt={item.name}
+                    onError={(e) => {
+                      e.target.src = 'https://via.placeholder.com/60x60?text=No+Image'
+                    }}
+                  />
+                ))}
+              </div>
 
               <div className='text-gray-700'>
-                <div>
+                <div className='mb-3'>
                   {order.items.map((item, idx) => {
                     const discounted = item.discount
                       ? Math.round(item.price - (item.price * item.discount) / 100)
                       : item.price
                     return (
-                      <p className='py-0.5 text-sm' key={idx}>
-                      {item.name} x {item.quantity} {item.size && <span>({item.size})</span>}
-                    </p>
-                    
+                      <div key={idx} className='mb-2 pb-2 border-b last:border-b-0'>
+                        <p className='font-medium text-sm'>{item.name}</p>
+                        <p className='text-xs text-gray-600'>
+                          {item.quantity} × {currency}{discounted}
+                          {item.discount > 0 && (
+                            <span className='ml-2 text-green-600'>
+                              ({item.discount}% off)
+                            </span>
+                          )}
+                          {item.size && <span className='ml-2'>• Size: {item.size}</span>}
+                        </p>
+                        {item.id && (
+                          <p className='text-xs text-gray-400'>Product ID: {item.id}</p>
+                        )}
+                      </div>
                     )
                   })}
                 </div>
-                <p className='mt-3 mb-2 font-semibold text-[#052659]'>
-                  {order.address.firstName} {order.address.lastName}
-                </p>
-                <div className='text-xs'>
-                  <p>{order.address.street},</p>
-                  <p>
-                    {order.address.city}, {order.address.state},{' '}
-                    {order.address.country}, {order.address.zipcode}
+                <div className='mt-3'>
+                  <p className='font-semibold text-[#052659] text-sm'>
+                    {order.address.firstName} {order.address.lastName}
                   </p>
-                  <p>Phone: {order.address.phone}</p>
-                  <p>Email: {order.address.email}</p>
+                  <div className='text-xs text-gray-600 mt-1'>
+                    <p>{order.address.street},</p>
+                    <p>
+                      {order.address.city}, {order.address.state},{' '}
+                      {order.address.country}, {order.address.zipcode}
+                    </p>
+                    <p>📞 {order.address.phone}</p>
+                    <p>✉️ {order.address.email}</p>
+                  </div>
                 </div>
               </div>
 
-              <div className='text-gray-700 text-xs sm:text-sm'>
-                <p>Items: {order.items.length}</p>
-                <p>Method: {order.paymentMethod}</p>
-                <p>Payment: {order.payment ? 'Done' : 'Pending'}</p>
-                <p>Date: {new Date(order.date).toLocaleDateString('en-CA')}</p>
+              <div className='text-gray-700 text-xs sm:text-sm space-y-1'>
+                <p><span className='font-medium'>Items:</span> {order.items.length}</p>
+                <p><span className='font-medium'>Method:</span> {order.paymentMethod}</p>
+                <p>
+                  <span className='font-medium'>Payment:</span> 
+                  <span className={order.payment ? 'text-green-600 ml-1' : 'text-orange-600 ml-1'}>
+                    {order.payment ? 'Done' : 'Pending'}
+                  </span>
+                </p>
+                <p><span className='font-medium'>Date:</span> {new Date(order.date).toLocaleDateString()}</p>
+                <p><span className='font-medium'>Time:</span> {new Date(order.date).toLocaleTimeString()}</p>
               </div>
 
               <div className='text-[#052659] font-semibold text-sm sm:text-base'>
-                <p>Total: {currency}{actualTotal/10}</p>
+                <p className='text-lg'>Total: {currency}{actualTotal}</p>
                 {actualTotal !== order.amount && (
-                  <p className='text-gray-500 text-xs line-through'>Was: {currency}{order.amount}</p>
+                  <p className='text-gray-500 text-xs line-through mt-1'>
+                    Original: {currency}{order.amount}
+                  </p>
+                )}
+                {actualTotal < order.amount && (
+                  <p className='text-green-600 text-xs mt-1'>
+                    Saved: {currency}{order.amount - actualTotal}
+                  </p>
                 )}
               </div>
 
@@ -183,7 +276,7 @@ const Orders = ({ token }) => {
                     <select
                       onChange={(event) => statusHandler(event, order._id)}
                       value={order.status}
-                      className='p-2 border border-gray-300 rounded focus:ring-2 focus:ring-[#052659] text-xs sm:text-sm'
+                      className='p-2 border border-gray-300 rounded focus:ring-2 focus:ring-[#052659] text-xs sm:text-sm bg-white'
                     >
                       <option value='Order Placed'>Order Placed</option>
                       <option value='Packing'>Packing</option>
@@ -195,13 +288,15 @@ const Orders = ({ token }) => {
 
                     <button
                       onClick={() => cancelOrder(order._id, order.address.email)}
-                      className='p-2 bg-red-500 text-white rounded text-sm'
+                      className='p-2 bg-red-500 text-white rounded text-sm hover:bg-red-600 transition-colors'
                     >
                       Cancel Order
                     </button>
                   </>
                 ) : (
-                  <span className='text-red-500 font-semibold'>Cancelled</span>
+                  <div className='text-center p-2 bg-red-100 rounded'>
+                    <span className='text-red-600 font-semibold text-sm'>Cancelled</span>
+                  </div>
                 )}
               </div>
             </div>
