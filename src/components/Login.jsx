@@ -20,7 +20,17 @@ const Login = ({ setToken }) => {
     const [showCurrentPassword, setShowCurrentPassword] = useState(false);
     const [showNewPassword, setShowNewPassword] = useState(false);
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-    const [adminToken, setAdminToken] = useState(''); // Store admin token
+    const [adminToken, setAdminToken] = useState('');
+    const [otpCountdown, setOtpCountdown] = useState(0);
+
+    // Countdown timer for OTP resend
+    React.useEffect(() => {
+        let timer;
+        if (otpCountdown > 0) {
+            timer = setTimeout(() => setOtpCountdown(otpCountdown - 1), 1000);
+        }
+        return () => clearTimeout(timer);
+    }, [otpCountdown]);
 
     const onSubmitHandler = async (e) => {
         e.preventDefault();
@@ -32,8 +42,8 @@ const Login = ({ setToken }) => {
             if (response.data.success) {
                 const token = response.data.token;
                 setToken(token);
-                setAdminToken(token); // Store token for change password
-                localStorage.setItem('adminToken', token); // Store in localStorage
+                setAdminToken(token);
+                localStorage.setItem('adminToken', token);
                 toast.success('Login successful!');
             } else {
                 toast.error(response.data.message);
@@ -59,7 +69,15 @@ const Login = ({ setToken }) => {
             return;
         }
 
+        // Prevent multiple clicks
+        if (changePasswordLoading) return;
+
         setChangePasswordLoading(true);
+        
+        // Set timeout for the request (25 seconds)
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 25000);
+
         try {
             const response = await axios.post(
                 backendUrl + '/api/user/admin/change-password/send-otp',
@@ -67,30 +85,40 @@ const Login = ({ setToken }) => {
                 { 
                     headers: { 
                         token: token 
-                    } 
+                    },
+                    signal: controller.signal,
+                    timeout: 25000
                 }
             );
             
+            clearTimeout(timeoutId);
+            
             if (response.data.success) {
                 setChangePasswordStep(2);
-                toast.success('OTP sent to vishesh.singal.contact@gmail.com');
+                setOtpCountdown(30); // 30 second countdown for resend
+                // toast.success('OTP sent to vishesh.singal.contact@gmail.com');
             } else {
                 toast.error(response.data.message);
             }
         } catch (error) {
+            clearTimeout(timeoutId);
             console.log('OTP Error:', error);
-            if (error.response?.status === 401) {
+            
+            if (error.name === 'AbortError' || error.code === 'ECONNABORTED') {
+                toast.error('Request timeout. Please check your internet connection and try again.');
+            } else if (error.response?.status === 401) {
                 if (error.response?.data?.message === 'Current password is incorrect') {
                     toast.error('Current password is incorrect');
                 } else {
                     toast.error('Session expired. Please login again.');
-                    // Clear token and reset
                     setAdminToken('');
                     localStorage.removeItem('adminToken');
                     setShowChangePassword(false);
                 }
+            } else if (error.response?.status === 500) {
+                toast.error(error.response?.data?.message || 'Server error. Please try again later.');
             } else {
-                toast.error(error.response?.data?.message || 'Failed to send OTP');
+                toast.error('Network error. Please check your connection and try again.');
             }
         } finally {
             setChangePasswordLoading(false);
@@ -110,8 +138,17 @@ const Login = ({ setToken }) => {
             toast.error('New passwords do not match');
             return;
         }
-        if (newPassword.length < 8) {
-            toast.error('Password must be at least 8 characters long');
+
+        // Enhanced password validation on frontend
+        const passwordValidation = validatePassword(newPassword);
+        if (!passwordValidation.isValid) {
+            let errorMessage = "Password must contain:";
+            if (!passwordValidation.minLength) errorMessage += " at least 8 characters,";
+            if (!passwordValidation.hasUpperCase) errorMessage += " one uppercase letter,";
+            if (!passwordValidation.hasLowerCase) errorMessage += " one lowercase letter,";
+            if (!passwordValidation.hasTwoSpecialChars) errorMessage += " at least two special characters,";
+            errorMessage = errorMessage.slice(0, -1) + '.';
+            toast.error(errorMessage);
             return;
         }
 
@@ -134,7 +171,8 @@ const Login = ({ setToken }) => {
                 { 
                     headers: { 
                         token: token 
-                    } 
+                    },
+                    timeout: 15000
                 }
             );
             
@@ -142,7 +180,6 @@ const Login = ({ setToken }) => {
                 toast.success('Password changed successfully!');
                 setShowChangePassword(false);
                 resetChangePasswordForm();
-                // Clear the password field so user can login with new password
                 setPassword('');
             } else {
                 toast.error(response.data.message);
@@ -154,12 +191,31 @@ const Login = ({ setToken }) => {
                 setAdminToken('');
                 localStorage.removeItem('adminToken');
                 setShowChangePassword(false);
+            } else if (error.code === 'ECONNABORTED') {
+                toast.error('Request timeout. Please try again.');
             } else {
                 toast.error(error.response?.data?.message || 'Failed to change password');
             }
         } finally {
             setChangePasswordLoading(false);
         }
+    };
+
+    // Frontend password validation helper
+    const validatePassword = (password) => {
+        const minLength = password.length >= 8;
+        const hasUpperCase = /[A-Z]/.test(password);
+        const hasLowerCase = /[a-z]/.test(password);
+        const specialChars = password.match(/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/g);
+        const hasTwoSpecialChars = specialChars && specialChars.length >= 2;
+
+        return {
+            isValid: minLength && hasUpperCase && hasLowerCase && hasTwoSpecialChars,
+            minLength,
+            hasUpperCase,
+            hasLowerCase,
+            hasTwoSpecialChars
+        };
     };
 
     const resetChangePasswordForm = () => {
@@ -171,6 +227,7 @@ const Login = ({ setToken }) => {
         setShowCurrentPassword(false);
         setShowNewPassword(false);
         setShowConfirmPassword(false);
+        setOtpCountdown(0);
     };
 
     const handleCancelChangePassword = () => {
@@ -178,7 +235,6 @@ const Login = ({ setToken }) => {
         resetChangePasswordForm();
     };
 
-    // Show change password only if logged in
     const handleChangePasswordClick = () => {
         const token = adminToken || localStorage.getItem('adminToken');
         if (!token) {
@@ -238,7 +294,14 @@ const Login = ({ setToken }) => {
                             type="submit"
                             disabled={loading}
                         >
-                            {loading ? 'Processing...' : 'Login to Admin Panel'}
+                            {loading ? (
+                                <div className="flex items-center justify-center">
+                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                                    Logging in...
+                                </div>
+                            ) : (
+                                'Login to Admin Panel'
+                            )}
                         </button>
 
                         {(adminToken || localStorage.getItem('adminToken')) && (
@@ -282,10 +345,19 @@ const Login = ({ setToken }) => {
                                     <button
                                         type='button'
                                         onClick={handleSendOTP}
-                                        disabled={changePasswordLoading}
+                                        disabled={changePasswordLoading || otpCountdown > 0}
                                         className='flex-1 py-2 px-4 rounded-md text-white bg-[#052659] hover:bg-[#041d47] transition disabled:opacity-50'
                                     >
-                                        {changePasswordLoading ? 'Sending OTP...' : 'Send OTP'}
+                                        {changePasswordLoading ? (
+                                            <div className="flex items-center justify-center">
+                                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                                                Sending OTP...
+                                            </div>
+                                        ) : otpCountdown > 0 ? (
+                                            `Resend OTP in ${otpCountdown}s`
+                                        ) : (
+                                            'Send OTP'
+                                        )}
                                     </button>
                                     <button
                                         type='button'
@@ -301,7 +373,14 @@ const Login = ({ setToken }) => {
                         {changePasswordStep === 2 && (
                             <div>
                                 <div className='mb-4'>
-                                    <p className='text-sm font-medium text-gray-700 mb-2'>OTP Sent to vishesh.singal.contact@gmail.com</p>
+                                    <p className='text-sm font-medium text-gray-700 mb-2'>
+                                        OTP Sent to vishesh.singal.contact@gmail.com
+                                        {otpCountdown > 0 && (
+                                            <span className='text-xs text-gray-500 ml-2'>
+                                                (Resend available in {otpCountdown}s)
+                                            </span>
+                                        )}
+                                    </p>
                                     <input
                                         value={otp}
                                         onChange={(e) => setOtp(e.target.value)}
@@ -330,6 +409,9 @@ const Login = ({ setToken }) => {
                                             {showNewPassword ? 'Hide' : 'Show'}
                                         </button>
                                     </div>
+                                    <p className='text-xs text-gray-500 mt-1'>
+                                        Must contain: 8+ chars, uppercase, lowercase, and 2+ special characters
+                                    </p>
                                 </div>
 
                                 <div className='mb-6'>
@@ -359,12 +441,20 @@ const Login = ({ setToken }) => {
                                         disabled={changePasswordLoading}
                                         className='flex-1 py-2 px-4 rounded-md text-white bg-[#052659] hover:bg-[#041d47] transition disabled:opacity-50'
                                     >
-                                        {changePasswordLoading ? 'Changing Password...' : 'Change Password'}
+                                        {changePasswordLoading ? (
+                                            <div className="flex items-center justify-center">
+                                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                                                Changing Password...
+                                            </div>
+                                        ) : (
+                                            'Change Password'
+                                        )}
                                     </button>
                                     <button
                                         type='button'
                                         onClick={() => setChangePasswordStep(1)}
-                                        className='flex-1 py-2 px-4 rounded-md text-gray-700 bg-gray-200 hover:bg-gray-300 transition'
+                                        disabled={changePasswordLoading}
+                                        className='flex-1 py-2 px-4 rounded-md text-gray-700 bg-gray-200 hover:bg-gray-300 transition disabled:opacity-50'
                                     >
                                         Back
                                     </button>
