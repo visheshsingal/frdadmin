@@ -4,7 +4,7 @@ import { backendUrl } from '../App';
 import { toast } from 'react-toastify';
 
 const Login = ({ setToken }) => {
-    const [email, setEmail] = useState('');
+    const [email, setEmail] = useState('frdgym@gmail.com');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
@@ -74,15 +74,24 @@ const Login = ({ setToken }) => {
 
         setChangePasswordLoading(true);
         
+        // Set timeout for the request (25 seconds)
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 25000);
+
         try {
             const response = await axios.post(
                 backendUrl + '/api/user/admin/change-password/send-otp',
                 { currentPassword },
                 { 
-                    headers: { token: token },
+                    headers: { 
+                        token: token 
+                    },
+                    signal: controller.signal,
                     timeout: 25000
                 }
             );
+            
+            clearTimeout(timeoutId);
             
             if (response.data.success) {
                 setChangePasswordStep(2);
@@ -92,9 +101,12 @@ const Login = ({ setToken }) => {
                 toast.error(response.data.message);
             }
         } catch (error) {
+            clearTimeout(timeoutId);
             console.log('OTP Error:', error);
             
-            if (error.response?.status === 401) {
+            if (error.name === 'AbortError' || error.code === 'ECONNABORTED') {
+                toast.error('Request timeout. Please check your internet connection and try again.');
+            } else if (error.response?.status === 401) {
                 if (error.response?.data?.message === 'Current password is incorrect') {
                     toast.error('Current password is incorrect');
                 } else {
@@ -157,7 +169,9 @@ const Login = ({ setToken }) => {
                     otp
                 },
                 { 
-                    headers: { token: token },
+                    headers: { 
+                        token: token 
+                    },
                     timeout: 15000
                 }
             );
@@ -245,11 +259,13 @@ const Login = ({ setToken }) => {
                             <input
                                 onChange={(e) => setEmail(e.target.value)}
                                 value={email}
-                                className='rounded-md w-full px-3 py-2 border border-gray-300 outline-none focus:ring-2 focus:ring-[#052659]'
+                                className='rounded-md w-full px-3 py-2 border border-gray-300 outline-none focus:ring-2 focus:ring-[#052659] bg-gray-100'
                                 type="email"
-                                placeholder='vishesh.singal.contact@gmail.com'
+                                placeholder='your@email.com'
                                 required
+                                disabled
                             />
+                            <p className='text-xs text-gray-500 mt-1'>Fixed email for security</p>
                         </div>
 
                         <div className='mb-6'>
@@ -361,7 +377,7 @@ const Login = ({ setToken }) => {
                                         OTP Sent to vishesh.singal.contact@gmail.com
                                         {otpCountdown > 0 && (
                                             <span className='text-xs text-gray-500 ml-2'>
-                                                (Resend available in ${otpCountdown}s)
+                                                (Resend available in {otpCountdown}s)
                                             </span>
                                         )}
                                     </p>
