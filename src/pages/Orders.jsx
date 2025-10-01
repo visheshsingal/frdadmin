@@ -81,15 +81,15 @@ const Orders = ({ token }) => {
   };
 
   // ✅ Get payment status for order
-  const getPaymentStatus = (order) => {
-    if (order.status === 'Cancelled') {
-      return 'refunded';
-    } else if (order.status === 'Delivered') {
-      return 'paid';
-    } else {
-      return 'pending';
-    }
+const getPaymentStatus = (order) => {
+  if (order.status === 'Cancelled') {
+    return 'refunded';
+  } else if (order.status === 'Delivered' || (order.paymentMethod === 'Razorpay' && order.payment === true)) {
+    return 'paid';
+  } else {
+    return 'pending';
   }
+}
 
   // ✅ Improved Analytics Calculation with proper payment status
   const calculateAnalytics = () => {
@@ -345,12 +345,17 @@ const Orders = ({ token }) => {
     );
   };
 
-  const filteredOrders = searchOrders(sortedOrders, searchTerm).filter((order) => {
-    const statusMatch = filter === 'All' || order.status === filter;
-    const dateMatch = !dateFilter || new Date(order.date).toLocaleDateString('en-CA') === dateFilter;
-    return statusMatch && dateMatch;
-  });
-
+const filteredOrders = searchOrders(sortedOrders, searchTerm).filter((order) => {
+  const statusMatch = filter === 'All' || order.status === filter;
+  const dateMatch = !dateFilter || new Date(order.date).toLocaleDateString('en-CA') === dateFilter;
+  
+  // ✅ ADD THIS LINE: Remove failed Razorpay payments
+  if (order.paymentMethod === 'Razorpay' && order.payment !== true) {
+    return false;
+  }
+  
+  return statusMatch && dateMatch;
+});
   const getProductImage = (item) => {
     if (item.id && productImages[item.id]) {
       return productImages[item.id];
