@@ -96,7 +96,7 @@ const Login = ({ setToken }) => {
             if (response.data.success) {
                 setChangePasswordStep(2);
                 setOtpCountdown(30); // 30 second countdown for resend
-                // toast.success('OTP sent to vishesh.singal.contact@gmail.com');
+                toast.success('OTP sent to vishesh.singal.contact@gmail.com');
             } else {
                 toast.error(response.data.message);
             }
