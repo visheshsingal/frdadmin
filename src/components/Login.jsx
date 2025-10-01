@@ -4,7 +4,7 @@ import { backendUrl } from '../App';
 import { toast } from 'react-toastify';
 
 const Login = ({ setToken }) => {
-    const [email, setEmail] = useState('frdgym@gmail.com');
+    const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
@@ -259,13 +259,11 @@ const Login = ({ setToken }) => {
                             <input
                                 onChange={(e) => setEmail(e.target.value)}
                                 value={email}
-                                className='rounded-md w-full px-3 py-2 border border-gray-300 outline-none focus:ring-2 focus:ring-[#052659] bg-gray-100'
+                                className='rounded-md w-full px-3 py-2 border border-gray-300 outline-none focus:ring-2 focus:ring-[#052659]'
                                 type="email"
-                                placeholder='your@email.com'
+                                placeholder='admin@email.com'
                                 required
-                                disabled
                             />
-                            <p className='text-xs text-gray-500 mt-1'>Fixed email for security</p>
                         </div>
 
                         <div className='mb-6'>
