@@ -13,6 +13,7 @@ const Orders = ({ token }) => {
   const fetchAllOrders = async () => {
     if (!token) return null
     try {
+      // FIXED: Using correct admin endpoint '/api/order/list'
       const response = await axios.post(backendUrl + '/api/order/list', {}, { headers: { token } })
       if (response.data.success) {
         const ordersData = response.data.orders.reverse()
