@@ -19,6 +19,8 @@ const Orders = ({ token }) => {
   const [noteText, setNoteText] = useState('')
   const [showViewNotesModal, setShowViewNotesModal] = useState(false)
   const [viewNotesText, setViewNotesText] = useState('')
+  const [showTrackingModal, setShowTrackingModal] = useState(false)
+  const [trackingUrlText, setTrackingUrlText] = useState('')
 
   const fetchAllOrders = async () => {
     if (!token) return null
@@ -336,6 +338,38 @@ const getPaymentStatus = (order) => {
   const handleViewNotes = (notes) => {
     setViewNotesText(notes)
     setShowViewNotesModal(true)
+  }
+
+  const handleAddTracking = (orderId, currentTrackingUrl) => {
+    setCurrentOrderId(orderId)
+    setTrackingUrlText(currentTrackingUrl || '')
+    setShowTrackingModal(true)
+  }
+
+  const saveTrackingUrl = async () => {
+    try {
+      await axios.post(
+        backendUrl + '/api/order/tracking',
+        { 
+          orderId: currentOrderId, 
+          trackingUrl: trackingUrlText
+        },
+        { headers: { token } }
+      );
+      
+      toast.success('Tracking URL updated successfully!');
+      setShowTrackingModal(false);
+      setTrackingUrlText('');
+      setCurrentOrderId('');
+      await fetchAllOrders();
+    } catch (error) {
+      console.error('Error updating tracking URL:', error);
+      if (error.response?.data?.message) {
+        toast.error(error.response.data.message);
+      } else {
+        toast.error('Failed to update tracking URL');
+      }
+    }
   }
 
   const saveNotes = async () => {
@@ -904,6 +938,29 @@ const filteredOrders = searchOrders(sortedOrders, searchTerm).filter((order) => 
                   📝 Add Notes
                 </button>
 
+                <button
+                  onClick={() => handleAddTracking(order._id, order.trackingUrl || '')}
+                  className='p-2 bg-green-500 text-white rounded text-xs hover:bg-green-600 transition'
+                >
+                  🚚 {order.trackingUrl ? 'Edit Tracking' : 'Add Tracking'}
+                </button>
+
+                {order.trackingUrl && (
+                  <div className='text-xs bg-green-50 p-2 rounded border-l-4 border-green-400 w-full min-w-0'>
+                    <strong className='text-green-700'>Tracking URL:</strong>
+                    <div className='text-gray-700 mt-1 w-full min-w-0'>
+                      <a 
+                        href={order.trackingUrl} 
+                        target='_blank' 
+                        rel='noopener noreferrer'
+                        className='text-blue-600 hover:text-blue-800 underline break-words'
+                      >
+                        {order.trackingUrl.length > 50 ? order.trackingUrl.substring(0, 50) + '...' : order.trackingUrl}
+                      </a>
+                    </div>
+                  </div>
+                )}
+
                 {order.adminNotes && (
                   <div className='text-xs bg-yellow-50 p-2 rounded border-l-4 border-yellow-400 w-full min-w-0'>
                     <strong className='text-yellow-700'>Admin Notes:</strong>
@@ -1001,6 +1058,42 @@ const filteredOrders = searchOrders(sortedOrders, searchTerm).filter((order) => 
                 className='bg-[#052659] text-white py-2 px-4 rounded-lg hover:bg-[#041d47] transition'
               >
                 Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tracking Modal */}
+      {showTrackingModal && (
+        <div className='fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50'>
+          <div className='bg-white p-6 rounded-lg shadow-lg w-96 max-w-full'>
+            <h3 className='text-lg font-semibold mb-4 text-[#052659]'>
+              {trackingUrlText ? 'Update Tracking URL' : 'Add Tracking URL'}
+            </h3>
+            <input
+              type="url"
+              value={trackingUrlText}
+              onChange={(e) => setTrackingUrlText(e.target.value)}
+              placeholder='Enter Shiprocket tracking URL...'
+              className='w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#052659] focus:border-[#052659]'
+            />
+            <div className='flex gap-3 mt-4'>
+              <button
+                onClick={saveTrackingUrl}
+                className='flex-1 bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 transition'
+              >
+                Save Tracking
+              </button>
+              <button
+                onClick={() => {
+                  setShowTrackingModal(false)
+                  setTrackingUrlText('')
+                  setCurrentOrderId('')
+                }}
+                className='flex-1 bg-gray-300 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-400 transition'
+              >
+                Cancel
               </button>
             </div>
           </div>
