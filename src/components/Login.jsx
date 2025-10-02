@@ -43,7 +43,7 @@ const Login = ({ setToken }) => {
                 const token = response.data.token;
                 setToken(token);
                 setAdminToken(token);
-                localStorage.setItem('adminToken', token);
+                localStorage.setItem('token', token); // Fixed: Changed from 'adminToken' to 'token'
                 toast.success('Login successful!');
             } else {
                 toast.error(response.data.message);
