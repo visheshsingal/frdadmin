@@ -13,6 +13,12 @@ const Orders = ({ token }) => {
   const [selectedMonth, setSelectedMonth] = useState('all')
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear())
   const [searchTerm, setSearchTerm] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
+  const [showNotesModal, setShowNotesModal] = useState(false)
+  const [currentOrderId, setCurrentOrderId] = useState('')
+  const [noteText, setNoteText] = useState('')
+  const [showViewNotesModal, setShowViewNotesModal] = useState(false)
+  const [viewNotesText, setViewNotesText] = useState('')
 
   const fetchAllOrders = async () => {
     if (!token) return null
@@ -82,8 +88,8 @@ const Orders = ({ token }) => {
 
   // ✅ Get payment status for order
 const getPaymentStatus = (order) => {
-  if (order.status === 'Cancelled') {
-    return 'refunded';
+  if (order.status === 'Cancelled' || order.status === 'Cancel and Refund') {
+    return order.status === 'Cancel and Refund' ? 'refunded' : 'cancelled';
   } else if (order.status === 'Delivered' || (order.paymentMethod === 'Razorpay' && order.payment === true)) {
     return 'paid';
   } else {
@@ -124,21 +130,31 @@ const getPaymentStatus = (order) => {
 
     // Categorize ALL orders for total calculations
     const allPaidOrders = allOrdersWithActualTotal.filter(order => order.status === 'Delivered');
-    const allRefundedOrders = allOrdersWithActualTotal.filter(order => order.status === 'Cancelled');
+    const allCancelledOrders = allOrdersWithActualTotal.filter(order => order.status === 'Cancelled');
+    const allRefundedOrders = allOrdersWithActualTotal.filter(order => order.status === 'Cancel and Refund');
+    const allCancelledAndRefunded = allOrdersWithActualTotal.filter(order => order.status === 'Cancelled' || order.status === 'Cancel and Refund');
     
     // Categorize FILTERED orders for filtered calculations
     const filteredPaidOrders = filteredOrdersWithActualTotal.filter(order => order.status === 'Delivered');
-    const filteredPendingOrders = filteredOrdersWithActualTotal.filter(order => order.status !== 'Cancelled' && order.status !== 'Delivered');
-    const filteredRefundedOrders = filteredOrdersWithActualTotal.filter(order => order.status === 'Cancelled');
-    const filteredActiveOrders = filteredOrdersWithActualTotal.filter(order => order.status !== 'Cancelled');
+    const filteredPendingOrders = filteredOrdersWithActualTotal.filter(order => 
+      order.status !== 'Cancelled' && 
+      order.status !== 'Cancel and Refund' && 
+      order.status !== 'Delivered'
+    );
+    const filteredCancelledOrders = filteredOrdersWithActualTotal.filter(order => order.status === 'Cancelled');
+    const filteredRefundedOrders = filteredOrdersWithActualTotal.filter(order => order.status === 'Cancel and Refund');
+    const filteredCancelledAndRefunded = filteredOrdersWithActualTotal.filter(order => order.status === 'Cancelled' || order.status === 'Cancel and Refund');
+    const filteredActiveOrders = filteredOrdersWithActualTotal.filter(order => order.status !== 'Cancelled' && order.status !== 'Cancel and Refund');
 
     // Calculate amounts for ALL data using actualTotal
     const totalAllSales = allPaidOrders.reduce((sum, order) => sum + order.actualTotal, 0);
     const totalAllRefunded = allRefundedOrders.reduce((sum, order) => sum + order.actualTotal, 0);
+    const totalAllCancelled = allCancelledOrders.reduce((sum, order) => sum + order.actualTotal, 0);
 
     // Calculate amounts for FILTERED data using actualTotal
     const totalFilteredSales = filteredPaidOrders.reduce((sum, order) => sum + order.actualTotal, 0);
     const totalFilteredRefunded = filteredRefundedOrders.reduce((sum, order) => sum + order.actualTotal, 0);
+    const totalFilteredCancelled = filteredCancelledOrders.reduce((sum, order) => sum + order.actualTotal, 0);
     const pendingAmount = filteredPendingOrders.reduce((sum, order) => sum + order.actualTotal, 0);
 
     // Annual monthly chart data (always show full year with proper scaling)
@@ -163,8 +179,12 @@ const getPaymentStatus = (order) => {
       const monthPaidOrders = monthOrdersWithActualTotal.filter(order => order.status === 'Delivered');
       
       const monthSales = monthPaidOrders.reduce((sum, order) => sum + order.actualTotal, 0);
-      const monthActiveOrders = monthOrdersWithActualTotal.filter(order => order.status !== 'Cancelled').length;
-      const monthCancelled = monthOrdersWithActualTotal.filter(order => order.status === 'Cancelled').length;
+      const monthActiveOrders = monthOrdersWithActualTotal.filter(order => 
+        order.status !== 'Cancelled' && order.status !== 'Cancel and Refund'
+      ).length;
+      const monthCancelled = monthOrdersWithActualTotal.filter(order => 
+        order.status === 'Cancelled' || order.status === 'Cancel and Refund'
+      ).length;
 
       monthlyChartData.push({
         month: months[month],
@@ -211,14 +231,34 @@ const getPaymentStatus = (order) => {
       // Total metrics (ALL data)
       totalAllSales,
       totalAllRefunded,
-      totalAllOrders: allOrdersWithActualTotal.filter(order => order.status !== 'Cancelled').length,
-      totalAllCancelled: allRefundedOrders.length,
+      totalAllCancelled,
+      totalAllOrders: allOrdersWithActualTotal.length,
+      totalAllActive: allOrdersWithActualTotal.filter(order => order.status !== 'Cancelled' && order.status !== 'Cancel and Refund').length,
+      totalAllPaid: allPaidOrders.length,
+      totalAllPending: allOrdersWithActualTotal.filter(order => 
+        order.status !== 'Cancelled' && 
+        order.status !== 'Cancel and Refund' && 
+        order.status !== 'Delivered'
+      ).length,
+      totalAllCancelledCount: allCancelledOrders.length,
+      totalAllRefundedCount: allRefundedOrders.length,
       
       // Filtered metrics (based on month/date selection)
       totalFilteredSales,
       totalFilteredRefunded,
+      totalFilteredCancelled,
       filteredOrders: filteredActiveOrders.length,
-      filteredCancelled: filteredRefundedOrders.length,
+      filteredDelivered: filteredPaidOrders.length,
+      filteredPending: filteredPendingOrders.length,
+      filteredCancelled: filteredCancelledOrders.length,
+      filteredRefunded: filteredRefundedOrders.length,
+      
+      // Filtered totals for dashboard boxes
+      totalFilteredOrders: filteredActiveOrders.length,
+      totalFilteredPaid: filteredPaidOrders.length,
+      totalFilteredPending: filteredPendingOrders.length,
+      totalFilteredCancelledCount: filteredCancelledOrders.length,
+      totalFilteredRefundedCount: filteredRefundedOrders.length,
       
       // Payment metrics (based on month/date selection)
       paymentBreakdown: {
@@ -233,6 +273,10 @@ const getPaymentStatus = (order) => {
         refunded: {
           count: filteredRefundedOrders.length,
           amount: totalFilteredRefunded
+        },
+        cancelled: {
+          count: filteredCancelledOrders.length,
+          amount: totalFilteredCancelled
         }
       },
       
@@ -279,6 +323,43 @@ const getPaymentStatus = (order) => {
         toast.error(error.response.data.message);
       } else {
         toast.error('Failed to update order status');
+      }
+    }
+  }
+
+  const handleAddNote = async (orderId, currentNotes) => {
+    setCurrentOrderId(orderId)
+    setNoteText(currentNotes || '')
+    setShowNotesModal(true)
+  }
+
+  const handleViewNotes = (notes) => {
+    setViewNotesText(notes)
+    setShowViewNotesModal(true)
+  }
+
+  const saveNotes = async () => {
+    try {
+      await axios.post(
+        backendUrl + '/api/order/notes',
+        { 
+          orderId: currentOrderId, 
+          adminNotes: noteText
+        },
+        { headers: { token } }
+      );
+      
+      toast.success('Notes updated successfully!');
+      setShowNotesModal(false)
+      setNoteText('')
+      setCurrentOrderId('')
+      await fetchAllOrders();
+    } catch (error) {
+      console.error('Error updating notes:', error);
+      if (error.response?.data?.message) {
+        toast.error(error.response.data.message);
+      } else {
+        toast.error('Failed to update notes');
       }
     }
   }
@@ -484,8 +565,40 @@ const filteredOrders = searchOrders(sortedOrders, searchTerm).filter((order) => 
             </div>
           </div>
 
+          {/* Order Status Overview - Updates with filters */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <div className="bg-blue-50 p-4 rounded border text-center">
+              <p className="text-2xl font-bold text-blue-700">
+                {analyticsData.totalFilteredOrders || 0}
+              </p>
+              <p className="text-gray-600 text-sm font-medium">Total Orders</p>
+              <p className="text-xs text-gray-400 mt-1">{analyticsData.currentFilter || 'All Time'}</p>
+            </div>
+            <div className="bg-green-50 p-4 rounded border text-center">
+              <p className="text-2xl font-bold text-green-700">
+                {analyticsData.totalFilteredPaid || 0}
+              </p>
+              <p className="text-gray-600 text-sm font-medium">Delivered Orders</p>
+              <p className="text-xs text-gray-400 mt-1">{analyticsData.currentFilter || 'All Time'}</p>
+            </div>
+            <div className="bg-yellow-50 p-4 rounded border text-center">
+              <p className="text-2xl font-bold text-yellow-700">
+                {analyticsData.totalFilteredPending || 0}
+              </p>
+              <p className="text-gray-600 text-sm font-medium">Pending Orders</p>
+              <p className="text-xs text-gray-400 mt-1">{analyticsData.currentFilter || 'All Time'}</p>
+            </div>
+            <div className="bg-red-50 p-4 rounded border text-center">
+              <p className="text-2xl font-bold text-red-700">
+                {(analyticsData.totalFilteredCancelledCount || 0) + (analyticsData.totalFilteredRefundedCount || 0)}
+              </p>
+              <p className="text-gray-600 text-sm font-medium">Cancelled Orders</p>
+              <p className="text-xs text-gray-400 mt-1">{analyticsData.currentFilter || 'All Time'}</p>
+            </div>
+          </div>
+
           {/* Payment Breakdown - These update based on filters */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
             <div className="bg-green-50 p-4 rounded border text-center">
               <p className="text-xl font-bold text-green-700">
                 {currency}{analyticsData.paymentBreakdown?.paid?.amount || 0}
@@ -498,6 +611,13 @@ const filteredOrders = searchOrders(sortedOrders, searchTerm).filter((order) => 
                 {currency}{analyticsData.paymentBreakdown?.pending?.amount || 0}
               </p>
               <p className="text-gray-600 text-sm">Pending ({analyticsData.paymentBreakdown?.pending?.count || 0} orders)</p>
+              <p className="text-xs text-gray-400 mt-1">{analyticsData.currentFilter || 'All Time'}</p>
+            </div>
+            <div className="bg-orange-50 p-4 rounded border text-center">
+              <p className="text-xl font-bold text-orange-700">
+                {currency}{analyticsData.paymentBreakdown?.cancelled?.amount || 0}
+              </p>
+              <p className="text-gray-600 text-sm">Cancelled ({analyticsData.paymentBreakdown?.cancelled?.count || 0} orders)</p>
               <p className="text-xs text-gray-400 mt-1">{analyticsData.currentFilter || 'All Time'}</p>
             </div>
             <div className="bg-red-50 p-4 rounded border text-center">
@@ -646,12 +766,11 @@ const filteredOrders = searchOrders(sortedOrders, searchTerm).filter((order) => 
           const isPaid = paymentStatus === 'paid'
           const isPending = paymentStatus === 'pending'
           const isRefunded = paymentStatus === 'refunded'
-          const canCancel = order.status !== 'Cancelled'
           
           return (
             <div
               key={order._id}
-              className='border rounded shadow-sm p-4 grid grid-cols-1 sm:grid-cols-[auto_2fr_1fr] lg:grid-cols-[auto_2fr_1fr_1fr_1fr] gap-4 items-start hover:bg-gray-50 transition'
+              className='border rounded shadow-sm p-4 grid grid-cols-1 sm:grid-cols-[auto_2fr_1fr] lg:grid-cols-[auto_2fr_1fr_1fr_1fr] gap-4 items-start hover:bg-gray-50 transition overflow-hidden'
             >
               {/* Product Images */}
               <div className='flex flex-col gap-2 min-w-[80px]'>
@@ -750,48 +869,80 @@ const filteredOrders = searchOrders(sortedOrders, searchTerm).filter((order) => 
                 )}
               </div>
 
-              <div className='flex flex-col gap-2'>
-                {canCancel ? (
-                  <>
-                    <select
-                      onChange={(event) => statusHandler(event, order._id)}
-                      value={order.status}
-                      className='p-2 border border-gray-300 rounded focus:ring-2 focus:ring-[#052659] text-xs sm:text-sm bg-white'
-                    >
-                      <option value='Order Placed'>Order Placed</option>
-                      <option value='Packing'>Packing</option>
-                      <option value='Shipped'>Shipped</option>
-                      <option value='Out for delivery'>Out for delivery</option>
-                      <option value='Delivered'>Delivered</option>
-                      <option value='Top Priority'>Top Priority</option>
-                      <option value='Cancelled'>Cancel Order</option>
-                    </select>
+              <div className='flex flex-col gap-2 min-w-0'>
+                <select
+                  onChange={(event) => statusHandler(event, order._id)}
+                  value={order.status}
+                  className='p-2 border border-gray-300 rounded focus:ring-2 focus:ring-[#052659] text-xs sm:text-sm bg-white'
+                >
+                  <option value='Order Placed'>Order Placed</option>
+                  <option value='Packing'>Packing</option>
+                  <option value='Shipped'>Shipped</option>
+                  <option value='Out for delivery'>Out for delivery</option>
+                  <option value='Delivered'>Delivered</option>
+                  <option value='Top Priority'>Top Priority</option>
+                  <option value='Cancelled'>Cancel</option>
+                  <option value='Cancel and Refund'>Cancel and Refund</option>
+                </select>
 
-                    <button
-                      onClick={() => cancelOrder(order._id, order.address.email)}
-                      className='p-2 bg-red-500 text-white rounded text-sm hover:bg-red-600 transition-colors'
-                    >
-                      Cancel Order
-                    </button>
+                <div className='text-xs text-gray-600 p-2 bg-gray-100 rounded'>
+                  <p>
+                    <strong>Payment Status:</strong> 
+                    {isRefunded ? ' 💸 REFUNDED' : isPaid ? ' ✅ PAID' : ' ❌ PENDING'}
+                  </p>
+                  {order.status === 'Delivered' && isPending && (
+                    <p className='text-green-600 font-semibold mt-1'>
+                      Will be auto-paid on delivery
+                    </p>
+                  )}
+                </div>
 
-                    <div className='text-xs text-gray-600 p-2 bg-gray-100 rounded'>
-                      <p>
-                        <strong>Payment Status:</strong> 
-                        {isRefunded ? ' 💸 REFUNDED' : isPaid ? ' ✅ PAID' : ' ❌ PENDING'}
-                      </p>
-                      {order.status === 'Delivered' && isPending && (
-                        <p className='text-green-600 font-semibold mt-1'>
-                          Will be auto-paid on delivery
-                        </p>
+                <button
+                  onClick={() => handleAddNote(order._id, order.adminNotes || '')}
+                  className='p-2 bg-blue-500 text-white rounded text-xs hover:bg-blue-600 transition'
+                >
+                  📝 Add Notes
+                </button>
+
+                {order.adminNotes && (
+                  <div className='text-xs bg-yellow-50 p-2 rounded border-l-4 border-yellow-400 w-full min-w-0'>
+                    <strong className='text-yellow-700'>Admin Notes:</strong>
+                    <div className='text-gray-700 mt-1 w-full min-w-0'>
+                      {order.adminNotes.length > 100 ? (
+                        <>
+                          <p className='break-words break-all word-wrap-break-word w-full min-w-0 overflow-hidden'>{order.adminNotes.substring(0, 100)}...</p>
+                          <button 
+                            onClick={() => handleViewNotes(order.adminNotes)}
+                            className='text-blue-600 hover:text-blue-800 underline mt-1 text-xs'
+                          >
+                            View Full Notes
+                          </button>
+                        </>
+                      ) : (
+                        <p className='break-words break-all word-wrap-break-word w-full min-w-0 overflow-hidden'>{order.adminNotes}</p>
                       )}
                     </div>
-                  </>
-                ) : (
-                  <div className='text-center p-2 bg-red-100 rounded'>
-                    <span className='text-red-600 font-semibold text-sm'>Cancelled</span>
-                    {isRefunded && (
-                      <p className='text-red-600 text-xs mt-1'>Payment Refunded</p>
-                    )}
+                  </div>
+                )}
+
+                {order.userNotes && (
+                  <div className='text-xs bg-blue-50 p-2 rounded border-l-4 border-blue-400 w-full min-w-0'>
+                    <strong className='text-blue-700'>Customer Special Request:</strong>
+                    <div className='text-gray-700 mt-1 w-full min-w-0'>
+                      {order.userNotes.length > 100 ? (
+                        <>
+                          <p className='break-words break-all word-wrap-break-word w-full min-w-0 overflow-hidden'>{order.userNotes.substring(0, 100)}...</p>
+                          <button 
+                            onClick={() => handleViewNotes(order.userNotes)}
+                            className='text-blue-600 hover:text-blue-800 underline mt-1 text-xs'
+                          >
+                            View Full Request
+                          </button>
+                        </>
+                      ) : (
+                        <p className='break-words break-all word-wrap-break-word w-full min-w-0 overflow-hidden'>{order.userNotes}</p>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
@@ -799,6 +950,62 @@ const filteredOrders = searchOrders(sortedOrders, searchTerm).filter((order) => 
           )
         })}
       </div>
+
+      {/* Notes Modal */}
+      {showNotesModal && (
+        <div className='fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50'>
+          <div className='bg-white p-6 rounded-lg shadow-lg w-96 max-w-full'>
+            <h3 className='text-lg font-semibold mb-4 text-[#052659]'>Add Admin Notes</h3>
+            <textarea
+              value={noteText}
+              onChange={(e) => setNoteText(e.target.value)}
+              placeholder='Enter notes for this order...'
+              className='w-full h-32 p-3 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-[#052659] focus:border-[#052659]'
+            />
+            <div className='flex gap-3 mt-4'>
+              <button
+                onClick={saveNotes}
+                className='flex-1 bg-[#052659] text-white py-2 px-4 rounded-lg hover:bg-[#041d47] transition'
+              >
+                Save Notes
+              </button>
+              <button
+                onClick={() => {
+                  setShowNotesModal(false)
+                  setNoteText('')
+                  setCurrentOrderId('')
+                }}
+                className='flex-1 bg-gray-300 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-400 transition'
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* View Notes Modal */}
+      {showViewNotesModal && (
+        <div className='fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50'>
+          <div className='bg-white p-6 rounded-lg shadow-lg w-96 max-w-full max-h-96'>
+            <h3 className='text-lg font-semibold mb-4 text-[#052659]'>Admin Notes</h3>
+            <div className='max-h-64 overflow-y-auto border border-gray-200 rounded p-3 bg-gray-50'>
+              <p className='text-gray-700 text-sm break-words whitespace-pre-wrap'>{viewNotesText}</p>
+            </div>
+            <div className='flex justify-end mt-4'>
+              <button
+                onClick={() => {
+                  setShowViewNotesModal(false)
+                  setViewNotesText('')
+                }}
+                className='bg-[#052659] text-white py-2 px-4 rounded-lg hover:bg-[#041d47] transition'
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
