@@ -26,6 +26,30 @@ const Sidebar = ({ userRole }) => {
                   isActive ? 'border-[#052659] bg-[#f0f4ff] text-[#052659]' : 'border-transparent hover:bg-gray-100'
                 }`
               }
+              to="/banners"
+            >
+              <img className='w-5 h-5' src={assets.upload_area} alt="" />
+              <p className='hidden md:block'>Banners</p>
+            </NavLink>
+
+            <NavLink
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-3 py-2 rounded-l transition border-l-4 ${
+                  isActive ? 'border-[#052659] bg-[#f0f4ff] text-[#052659]' : 'border-transparent hover:bg-gray-100'
+                }`
+              }
+              to="/media"
+            >
+              <img className='w-5 h-5' src={assets.upload_area} alt="" />
+              <p className='hidden md:block'>Media</p>
+            </NavLink>
+
+            <NavLink
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-3 py-2 rounded-l transition border-l-4 ${
+                  isActive ? 'border-[#052659] bg-[#f0f4ff] text-[#052659]' : 'border-transparent hover:bg-gray-100'
+                }`
+              }
               to="/list"
             >
               <img className='w-5 h-5' src={assets.order_icon} alt="" />
@@ -44,17 +68,7 @@ const Sidebar = ({ userRole }) => {
               <p className='hidden md:block'>Orders</p>
             </NavLink>
 
-            <NavLink
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2 rounded-l transition border-l-4 ${
-                  isActive ? 'border-[#052659] bg-[#f0f4ff] text-[#052659]' : 'border-transparent hover:bg-gray-100'
-                }`
-              }
-              to="/settings"
-            >
-              <img className='w-5 h-5' src={assets.order_icon} alt="" />
-              <p className='hidden md:block'>Settings</p>
-            </NavLink>
+            {/* Settings link removed per request */}
 
             {/* <NavLink
               className={({ isActive }) =>

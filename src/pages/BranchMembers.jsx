@@ -83,7 +83,7 @@ const BranchMembers = ({ token }) => {
 											<div className='text-xs text-gray-500'>{new Date(member.firstBooking).toLocaleTimeString()}</div>
 										</td>
 										<td className='p-3'>
-											<span className='px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full font-medium'>
+											<span className='px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full font-medium'>
 												{member.bookingCount} {member.bookingCount === 1 ? 'booking' : 'bookings'}
 											</span>
 										</td>

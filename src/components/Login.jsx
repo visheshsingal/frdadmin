@@ -6,6 +6,7 @@ import { toast } from 'react-toastify';
 const Login = ({ setToken }) => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [adminCode, setAdminCode] = useState('');
     const [loading, setLoading] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
     
@@ -15,6 +16,12 @@ const Login = ({ setToken }) => {
     const [newPassword, setNewPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [otp, setOtp] = useState('');
+    const [loginOtpMode, setLoginOtpMode] = useState(false);
+    const [forgotPasswordMode, setForgotPasswordMode] = useState(false);
+    const [forgotStep, setForgotStep] = useState(1); // 1: enter code+email, 2: enter otp+new passwords
+    const [resetNewPassword, setResetNewPassword] = useState('');
+    const [resetConfirmPassword, setResetConfirmPassword] = useState('');
+    const [resetLoading, setResetLoading] = useState(false);
     const [changePasswordStep, setChangePasswordStep] = useState(1);
     const [changePasswordLoading, setChangePasswordLoading] = useState(false);
     const [showCurrentPassword, setShowCurrentPassword] = useState(false);
@@ -37,14 +44,23 @@ const Login = ({ setToken }) => {
         setLoading(true);
 
         try {
-            const payload = { email, password };
+            const payload = { email, password, adminCode };
             const response = await axios.post(backendUrl + '/api/user/admin', payload);
             if (response.data.success) {
-                const token = response.data.token;
-                setToken(token);
-                setAdminToken(token);
-                localStorage.setItem('token', token); // Fixed: Changed from 'adminToken' to 'token'
-                toast.success('Login successful!');
+                // If backend returned a token directly (legacy), use it
+                if (response.data.token) {
+                    const token = response.data.token;
+                    setToken(token);
+                    setAdminToken(token);
+                    localStorage.setItem('token', token);
+                    toast.success('Login successful!');
+                } else if (response.data.emailSent) {
+                    // OTP sent for verification
+                    toast.success('OTP sent to admin email. Please enter OTP to complete login.');
+                    setLoginOtpMode(true);
+                } else {
+                    toast.success(response.data.message || 'OTP flow started');
+                }
             } else {
                 toast.error(response.data.message);
             }
@@ -53,6 +69,83 @@ const Login = ({ setToken }) => {
             toast.error(error.response?.data?.message || error.message);
         } finally {
             setLoading(false);
+        }
+    };
+
+    // Forgot password: step 1 -> send OTP (requires adminCode and email)
+    const handleSendForgotOtp = async () => {
+        if (!adminCode || adminCode.toString().length !== 8) return toast.error('Please enter the 8-digit admin code');
+        if (!email) return toast.error('Please enter admin email');
+
+        setResetLoading(true);
+        try {
+            const res = await axios.post(backendUrl + '/api/user/admin/forgot-password', { email, adminCode }, { timeout: 20000 });
+            if (res.data.success) {
+                toast.success('OTP sent to admin email (if email configured)');
+                setForgotStep(2);
+            } else {
+                toast.error(res.data.message || 'Failed to send OTP');
+            }
+        } catch (err) {
+            console.error('Send forgot OTP error:', err);
+            toast.error(err.response?.data?.message || 'Failed to send OTP');
+        } finally {
+            setResetLoading(false);
+        }
+    };
+
+    // Verify OTP then perform reset using returned resetToken
+    const handleVerifyForgotOtpAndReset = async () => {
+        if (!otp) return toast.error('Please enter OTP');
+        if (!resetNewPassword || !resetConfirmPassword) return toast.error('Please enter new password and confirmation');
+        if (resetNewPassword !== resetConfirmPassword) return toast.error('Passwords do not match');
+        setResetLoading(true);
+        try {
+            const verifyRes = await axios.post(backendUrl + '/api/user/admin/verify-forgot-otp', { email, otp, adminCode }, { timeout: 20000 });
+            if (!verifyRes.data.success) return toast.error(verifyRes.data.message || 'OTP verification failed');
+
+            const resetToken = verifyRes.data.resetToken;
+            if (!resetToken) return toast.error('No reset token received');
+
+            // Call reset-password
+            const resetRes = await axios.post(backendUrl + '/api/user/reset-password', { resetToken, newPassword: resetNewPassword, confirmPassword: resetConfirmPassword });
+            if (resetRes.data.success) {
+                toast.success('Password reset successfully. You can login now.');
+                setForgotPasswordMode(false);
+                setForgotStep(1);
+                setOtp('');
+                setResetNewPassword('');
+                setResetConfirmPassword('');
+            } else {
+                toast.error(resetRes.data.message || 'Failed to reset password');
+            }
+        } catch (err) {
+            console.error('Verify & reset error:', err);
+            toast.error(err.response?.data?.message || 'Failed to verify OTP or reset password');
+        } finally {
+            setResetLoading(false);
+        }
+    };
+
+    // Verify OTP after admin login (complete login)
+    const handleVerifyLoginOtp = async () => {
+        if (!otp) return toast.error('Please enter OTP');
+        try {
+            const verifyRes = await axios.post(backendUrl + '/api/user/verify-login-otp', { email, otp }, { timeout: 20000 });
+            if (!verifyRes.data.success) return toast.error(verifyRes.data.message || 'OTP verification failed');
+
+            const token = verifyRes.data.token;
+            if (!token) return toast.error('No token received after OTP verification');
+
+            setToken(token);
+            setAdminToken(token);
+            localStorage.setItem('token', token);
+            toast.success('Login successful!');
+            setLoginOtpMode(false);
+            setOtp('');
+        } catch (err) {
+            console.error('Verify login OTP error:', err);
+            toast.error(err.response?.data?.message || 'Failed to verify OTP');
         }
     };
 
@@ -146,6 +239,7 @@ const Login = ({ setToken }) => {
             if (!passwordValidation.minLength) errorMessage += " at least 8 characters,";
             if (!passwordValidation.hasUpperCase) errorMessage += " one uppercase letter,";
             if (!passwordValidation.hasLowerCase) errorMessage += " one lowercase letter,";
+            // Admin change requires stronger rule: at least two special characters
             if (!passwordValidation.hasTwoSpecialChars) errorMessage += " at least two special characters,";
             errorMessage = errorMessage.slice(0, -1) + '.';
             toast.error(errorMessage);
@@ -206,14 +300,16 @@ const Login = ({ setToken }) => {
         const minLength = password.length >= 8;
         const hasUpperCase = /[A-Z]/.test(password);
         const hasLowerCase = /[a-z]/.test(password);
-        const specialChars = password.match(/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/g);
+        const specialChars = password.match(/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>\/\?]/g);
+        const hasAtLeastOneSpecialChar = specialChars && specialChars.length >= 1;
         const hasTwoSpecialChars = specialChars && specialChars.length >= 2;
 
         return {
-            isValid: minLength && hasUpperCase && hasLowerCase && hasTwoSpecialChars,
+            isValid: minLength && hasUpperCase && hasLowerCase && hasAtLeastOneSpecialChar,
             minLength,
             hasUpperCase,
             hasLowerCase,
+            hasAtLeastOneSpecialChar,
             hasTwoSpecialChars
         };
     };
@@ -252,8 +348,129 @@ const Login = ({ setToken }) => {
                 </h1>
 
                 {!showChangePassword ? (
+                    // either forgot-password flow or login form
+                    forgotPasswordMode ? (
+                        // Forgot password flow
+                        <div>
+                            {forgotStep === 1 && (
+                                <div>
+                                    <div className='mb-4'>
+                                        <p className='text-sm font-medium text-gray-700 mb-2'>Admin Code (8 digits)</p>
+                                        <input
+                                            onChange={(e) => setAdminCode(e.target.value.replace(/[^0-9]/g, ''))}
+                                            value={adminCode}
+                                            className='rounded-md w-full px-3 py-2 border border-gray-300 outline-none focus:ring-2 focus:ring-[#052659]'
+                                            type="text"
+                                            placeholder='Enter 8-digit admin code'
+                                            maxLength={8}
+                                            required
+                                        />
+                                    </div>
+                                    <div className='mb-4'>
+                                        <p className='text-sm font-medium text-gray-700 mb-2'>Admin Email</p>
+                                        <input
+                                            onChange={(e) => setEmail(e.target.value)}
+                                            value={email}
+                                            className='rounded-md w-full px-3 py-2 border border-gray-300 outline-none focus:ring-2 focus:ring-[#052659]'
+                                            type="email"
+                                            placeholder='admin@email.com'
+                                            required
+                                        />
+                                    </div>
+
+                                    <div className='flex gap-2'>
+                                        <button
+                                            type='button'
+                                            onClick={handleSendForgotOtp}
+                                            disabled={resetLoading}
+                                            className='flex-1 py-2 px-4 rounded-md text-white bg-[#052659] hover:bg-[#041d47] transition disabled:opacity-50'
+                                        >
+                                            {resetLoading ? 'Sending...' : 'Send OTP'}
+                                        </button>
+                                        <button
+                                            type='button'
+                                            onClick={() => setForgotPasswordMode(false)}
+                                            className='flex-1 py-2 px-4 rounded-md text-gray-700 bg-gray-200 hover:bg-gray-300 transition'
+                                        >
+                                            Cancel
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {forgotStep === 2 && (
+                                <div>
+                                    <div className='mb-4'>
+                                        <p className='text-sm font-medium text-gray-700 mb-2'>Enter OTP</p>
+                                        <input
+                                            value={otp}
+                                            onChange={(e) => setOtp(e.target.value.replace(/[^0-9]/g, ''))}
+                                            className='rounded-md w-full px-3 py-2 border border-gray-300 outline-none focus:ring-2 focus:ring-[#052659]'
+                                            type="text"
+                                            placeholder='Enter OTP'
+                                            maxLength={6}
+                                        />
+                                    </div>
+
+                                    <div className='mb-4'>
+                                        <p className='text-sm font-medium text-gray-700 mb-2'>New Password</p>
+                                        <input
+                                            value={resetNewPassword}
+                                            onChange={(e) => setResetNewPassword(e.target.value)}
+                                            className='rounded-md w-full px-3 py-2 border border-gray-300 outline-none focus:ring-2 focus:ring-[#052659]'
+                                            type='password'
+                                            placeholder='Enter new password'
+                                        />
+                                    </div>
+
+                                    <div className='mb-4'>
+                                        <p className='text-sm font-medium text-gray-700 mb-2'>Confirm New Password</p>
+                                        <input
+                                            value={resetConfirmPassword}
+                                            onChange={(e) => setResetConfirmPassword(e.target.value)}
+                                            className='rounded-md w-full px-3 py-2 border border-gray-300 outline-none focus:ring-2 focus:ring-[#052659]'
+                                            type='password'
+                                            placeholder='Confirm new password'
+                                        />
+                                    </div>
+
+                                    <div className='flex gap-2'>
+                                        <button
+                                            type='button'
+                                            onClick={handleVerifyForgotOtpAndReset}
+                                            disabled={resetLoading}
+                                            className='flex-1 py-2 px-4 rounded-md text-white bg-[#052659] hover:bg-[#041d47] transition disabled:opacity-50'
+                                        >
+                                            {resetLoading ? 'Resetting...' : 'Verify OTP & Reset'}
+                                        </button>
+                                        <button
+                                            type='button'
+                                            onClick={() => { setForgotStep(1); setOtp(''); }}
+                                            className='flex-1 py-2 px-4 rounded-md text-gray-700 bg-gray-200 hover:bg-gray-300 transition'
+                                        >
+                                            Back
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    ) : (
                     // Login Form
+                    <>
                     <form onSubmit={onSubmitHandler}>
+                        <div className='mb-4'>
+                            <p className='text-sm font-medium text-gray-700 mb-2'>Admin Code (8 digits)</p>
+                            <input
+                                onChange={(e) => setAdminCode(e.target.value.replace(/[^0-9]/g, ''))}
+                                value={adminCode}
+                                className='rounded-md w-full px-3 py-2 border border-gray-300 outline-none focus:ring-2 focus:ring-[#052659]'
+                                type="text"
+                                placeholder='Enter 8-digit admin code'
+                                maxLength={8}
+                                required
+                            />
+                        </div>
+
                         <div className='mb-4'>
                             <p className='text-sm font-medium text-gray-700 mb-2'>Email Address</p>
                             <input
@@ -302,19 +519,32 @@ const Login = ({ setToken }) => {
                             )}
                         </button>
 
-                        {(adminToken || localStorage.getItem('adminToken')) && (
-                            <div className='text-center'>
-                                <button
-                                    type='button'
-                                    onClick={handleChangePasswordClick}
-                                    className='text-sm text-[#052659] hover:text-[#041d47] underline'
-                                >
-                                    Change Admin Password
-                                </button>
-                            </div>
-                        )}
-                    </form>
-                ) : (
+                        <div className='text-center'>
+                            <button type='button' onClick={() => setForgotPasswordMode(true)} className='text-sm text-[#052659] underline'>Forgot your password?</button>
+                        </div>
+                            </form>
+
+                            {loginOtpMode && (
+                                <div className="mt-4">
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Enter OTP</label>
+                                    <div className="flex gap-2">
+                                        <input
+                                            type="text"
+                                            value={otp}
+                                            onChange={(e) => setOtp(e.target.value)}
+                                            className="px-3 py-2 border border-gray-300 rounded-md w-40"
+                                            placeholder="Enter OTP"
+                                        />
+                                        <button
+                                            onClick={handleVerifyLoginOtp}
+                                            className="bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700"
+                                        >Verify OTP</button>
+                                    </div>
+                                </div>
+                            )}
+            </>
+        )) : (
+
                     // Change Password Form
                     <div>
                         {changePasswordStep === 1 && (

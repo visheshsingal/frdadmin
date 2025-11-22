@@ -21,6 +21,8 @@ const Orders = ({ token }) => {
   const [viewNotesText, setViewNotesText] = useState('')
   const [showTrackingModal, setShowTrackingModal] = useState(false)
   const [trackingUrlText, setTrackingUrlText] = useState('')
+  const [adminUploadFiles, setAdminUploadFiles] = useState({})
+  const [adminUploadingOrderId, setAdminUploadingOrderId] = useState(null)
 
   const fetchAllOrders = async () => {
     if (!token) return null
@@ -80,10 +82,14 @@ const Orders = ({ token }) => {
   const calculateDiscountedAmount = (items) => {
     let total = 0;
     for (let item of items) {
-      const price = item.price;
-      const discount = item.discount || 0;
-      const finalPrice = Math.round(price - (price * discount / 100));
-      total += finalPrice * item.quantity;
+      if (item.finalPrice !== undefined) {
+        total += Number(item.finalPrice) * item.quantity;
+      } else {
+        const price = item.price;
+        const discount = item.discount || 0;
+        const finalPrice = Math.round(price - (price * discount / 100));
+        total += finalPrice * item.quantity;
+      }
     }
     return total;
   };
@@ -472,12 +478,9 @@ const filteredOrders = searchOrders(sortedOrders, searchTerm).filter((order) => 
   return statusMatch && dateMatch;
 });
   const getProductImage = (item) => {
-    if (item.id && productImages[item.id]) {
-      return productImages[item.id];
-    }
-    if (item.image) {
-      return Array.isArray(item.image) ? item.image[0] : item.image;
-    }
+    // Prefer per-order item image (variant-specific) if available
+    if (item.image) return Array.isArray(item.image) ? item.image[0] : item.image;
+    if (item.id && productImages[item.id]) return productImages[item.id];
     return 'https://via.placeholder.com/60x60?text=No+Image';
   };
 
@@ -506,7 +509,7 @@ const filteredOrders = searchOrders(sortedOrders, searchTerm).filter((order) => 
         <h3 className='text-[#052659] text-xl font-bold'>All Orders</h3>
         <button
           onClick={() => setShowAnalytics(!showAnalytics)}
-          className='bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors'
+          className='bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors'
         >
           {showAnalytics ? 'Hide Analytics' : 'Show Analytics Dashboard'}
         </button>
@@ -586,7 +589,7 @@ const filteredOrders = searchOrders(sortedOrders, searchTerm).filter((order) => 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
             {/* Total Sales (All Time) */}
             <div className="bg-white p-4 rounded-lg border text-center shadow-sm">
-              <p className="text-2xl font-bold text-green-600">{currency}{analyticsData.totalAllSales || 0}</p>
+              <p className="text-2xl font-bold text-blue-600">{currency}{analyticsData.totalAllSales || 0}</p>
               <p className="text-gray-600 text-sm">Total Sales</p>
               <p className="text-xs text-gray-400 mt-1">All Time (After Discounts)</p>
             </div>
@@ -608,8 +611,8 @@ const filteredOrders = searchOrders(sortedOrders, searchTerm).filter((order) => 
               <p className="text-gray-600 text-sm font-medium">Total Orders</p>
               <p className="text-xs text-gray-400 mt-1">{analyticsData.currentFilter || 'All Time'}</p>
             </div>
-            <div className="bg-green-50 p-4 rounded border text-center">
-              <p className="text-2xl font-bold text-green-700">
+            <div className="bg-blue-50 p-4 rounded border text-center">
+              <p className="text-2xl font-bold text-blue-700">
                 {analyticsData.totalFilteredPaid || 0}
               </p>
               <p className="text-gray-600 text-sm font-medium">Delivered Orders</p>
@@ -633,8 +636,8 @@ const filteredOrders = searchOrders(sortedOrders, searchTerm).filter((order) => 
 
           {/* Payment Breakdown - These update based on filters */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-            <div className="bg-green-50 p-4 rounded border text-center">
-              <p className="text-xl font-bold text-green-700">
+            <div className="bg-blue-50 p-4 rounded border text-center">
+              <p className="text-xl font-bold text-blue-700">
                 {currency}{analyticsData.paymentBreakdown?.paid?.amount || 0}
               </p>
               <p className="text-gray-600 text-sm">Paid ({analyticsData.paymentBreakdown?.paid?.count || 0} orders)</p>
@@ -696,7 +699,7 @@ const filteredOrders = searchOrders(sortedOrders, searchTerm).filter((order) => 
                       
                       {/* Sales Amount */}
                       {monthData.sales > 0 && (
-                        <p className="text-xs text-green-600 font-bold mt-1">
+                        <p className="text-xs text-blue-600 font-bold mt-1">
                           {currency}{monthData.sales > 1000 ? `${(monthData.sales/1000).toFixed(1)}k` : monthData.sales}
                         </p>
                       )}
@@ -726,7 +729,7 @@ const filteredOrders = searchOrders(sortedOrders, searchTerm).filter((order) => 
                   <p className="text-xs font-semibold text-gray-600">
                     {day.date.split('/')[0]}/{day.date.split('/')[1]}
                   </p>
-                  <p className="text-green-600 font-bold text-sm">
+                  <p className="text-blue-600 font-bold text-sm">
                     {currency}{day.sales}
                   </p>
                   <p className="text-xs text-gray-500">{day.orders} orders</p>
@@ -825,27 +828,35 @@ const filteredOrders = searchOrders(sortedOrders, searchTerm).filter((order) => 
               <div className='text-gray-700'>
                 <div className='mb-3'>
                   {order.items.map((item, idx) => {
-                    const discounted = item.discount
-                      ? Math.round(item.price - (item.price * item.discount) / 100)
-                      : item.price
-                    return (
-                      <div key={idx} className='mb-2 pb-2 border-b last:border-b-0'>
-                        <p className='font-medium text-sm'>{item.name}</p>
-                        <p className='text-xs text-gray-600'>
-                          {item.quantity} × {currency}{discounted}
-                          {item.discount > 0 && (
-                            <span className='ml-2 text-green-600'>
-                              ({item.discount}% off)
-                            </span>
+                      // Support both legacy and new order item shape
+                      const unitPrice = item.finalPrice !== undefined ? Number(item.finalPrice) : (item.price !== undefined ? Number(item.price) : 0);
+                      const origUnit = item.unitPrice !== undefined ? Number(item.unitPrice) : (item.price !== undefined ? Number(item.price) : unitPrice);
+                      const discount = item.discount !== undefined ? Number(item.discount) : (item.discount || 0);
+                      return (
+                        <div key={idx} className='mb-2 pb-2 border-b last:border-b-0'>
+                          <p className='font-medium text-sm'>{item.name} {item.variantName ? `- ${item.variantName}` : ''}</p>
+                          <p className='text-xs text-gray-600'>
+                            {item.quantity} × {currency}{unitPrice}
+                            {discount > 0 && (
+                              <span className='ml-2 text-blue-600'>
+                                ({discount}% off)
+                              </span>
+                            )}
+                            {item.selectedOptions && item.selectedOptions.length > 0 ? (
+                              <span className='ml-2'>• {item.selectedOptions.map(so => `${so.groupLabel ? so.groupLabel + ': ' : ''}${so.optionName}`).join(' • ')}</span>
+                            ) : (
+                              item.groupLabel && <span className='ml-2'>• {item.groupLabel}</span>
+                            )}
+                          </p>
+                          {item.id && (
+                            <p className='text-xs text-gray-400'>Product ID: {item.id}</p>
                           )}
-                          {item.size && <span className='ml-2'>• Size: {item.size}</span>}
-                        </p>
-                        {item.id && (
-                          <p className='text-xs text-gray-400'>Product ID: {item.id}</p>
-                        )}
-                      </div>
-                    )
-                  })}
+                          {origUnit !== unitPrice && (
+                            <p className='text-xs text-gray-400'>Orig: {currency}{origUnit}</p>
+                          )}
+                        </div>
+                      )
+                    })}
                 </div>
                 <div className='mt-3'>
                   <p className='font-semibold text-[#052659] text-sm'>
@@ -872,7 +883,7 @@ const filteredOrders = searchOrders(sortedOrders, searchTerm).filter((order) => 
                   {isRefunded ? (
                     <span className='text-red-600 ml-1 font-semibold'>REFUNDED</span>
                   ) : isPaid ? (
-                    <span className='text-green-600 ml-1 font-semibold'>PAID</span>
+                    <span className='text-blue-600 ml-1 font-semibold'>PAID</span>
                   ) : (
                     <span className='text-orange-600 ml-1 font-semibold'>PENDING</span>
                   )}
@@ -892,7 +903,7 @@ const filteredOrders = searchOrders(sortedOrders, searchTerm).filter((order) => 
                   </p>
                 )}
                 {actualTotal < order.amount && (
-                  <p className='text-green-600 text-xs mt-1'>
+                  <p className='text-blue-600 text-xs mt-1'>
                     {/* Saved: {currency}{order.amount - actualTotal} */}
                   </p>
                 )}
@@ -925,7 +936,7 @@ const filteredOrders = searchOrders(sortedOrders, searchTerm).filter((order) => 
                     {isRefunded ? ' 💸 REFUNDED' : isPaid ? ' ✅ PAID' : ' ❌ PENDING'}
                   </p>
                   {order.status === 'Delivered' && isPending && (
-                    <p className='text-green-600 font-semibold mt-1'>
+                    <p className='text-blue-600 font-semibold mt-1'>
                       Will be auto-paid on delivery
                     </p>
                   )}
@@ -940,14 +951,14 @@ const filteredOrders = searchOrders(sortedOrders, searchTerm).filter((order) => 
 
                 <button
                   onClick={() => handleAddTracking(order._id, order.trackingUrl || '')}
-                  className='p-2 bg-green-500 text-white rounded text-xs hover:bg-green-600 transition'
+                  className='p-2 bg-blue-600 text-white rounded text-xs hover:bg-blue-600 transition'
                 >
                   🚚 {order.trackingUrl ? 'Edit Tracking' : 'Add Tracking'}
                 </button>
 
                 {order.trackingUrl && (
-                  <div className='text-xs bg-green-50 p-2 rounded border-l-4 border-green-400 w-full min-w-0'>
-                    <strong className='text-green-700'>Tracking URL:</strong>
+                  <div className='text-xs bg-blue-50 p-2 rounded border-l-4 border-blue-400 w-full min-w-0'>
+                    <strong className='text-blue-700'>Tracking URL:</strong>
                     <div className='text-gray-700 mt-1 w-full min-w-0'>
                       <a 
                         href={order.trackingUrl} 
@@ -1002,6 +1013,35 @@ const filteredOrders = searchOrders(sortedOrders, searchTerm).filter((order) => 
                     </div>
                   </div>
                 )}
+                    {/* Admin Invoice Upload / View - improved UI */}
+                    <div className='bg-gray-800 rounded-lg p-3 mt-3 w-full'>
+                      <div className='text-blue-600 font-medium text-sm'>Invoice / Bill</div>
+
+                      <div className='mt-2 flex items-center gap-2'>
+                        {order.billImage && (
+                          <a href={order.billImage} target='_blank' rel='noreferrer' className='px-3 py-1 bg-gray-700 text-white rounded text-xs hover:opacity-90 transition'>View Invoice</a>
+                        )}
+
+                        <label className='m-0'>
+                          <input id={`admin-bill-${order._id}`} type='file' accept='image/*' className='hidden' onChange={async (e) => {
+                            const file = e.target.files && e.target.files[0];
+                            if (!file) return;
+                            setAdminUploadFiles(prev => ({ ...prev, [order._id]: file }));
+                            setAdminUploadingOrderId(order._id);
+                            const fd = new FormData(); fd.append('bill', file); fd.append('orderId', order._id);
+                            try {
+                              const res = await axios.post(backendUrl + '/api/order/admin/upload-bill', fd, { headers: { token } });
+                              if (res.data.success) { toast.success(order.billImage ? 'Invoice replaced' : 'Invoice uploaded'); fetchAllOrders(); }
+                              else toast.error(res.data.message || 'Upload failed');
+                            } catch (err) { console.error('Admin upload error:', err); toast.error(err.response?.data?.message || 'Upload failed'); }
+                            finally { setAdminUploadingOrderId(null); }
+                          }} />
+                          <button type='button' onClick={() => document.getElementById(`admin-bill-${order._id}`).click()} className='px-3 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600 transition'>
+                            {adminUploadingOrderId === order._id ? 'Uploading...' : (order.billImage ? 'Replace Invoice' : 'Upload Invoice')}
+                          </button>
+                        </label>
+                      </div>
+                    </div>
               </div>
             </div>
           )
@@ -1081,7 +1121,7 @@ const filteredOrders = searchOrders(sortedOrders, searchTerm).filter((order) => 
             <div className='flex gap-3 mt-4'>
               <button
                 onClick={saveTrackingUrl}
-                className='flex-1 bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 transition'
+                className='flex-1 bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition'
               >
                 Save Tracking
               </button>

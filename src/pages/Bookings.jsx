@@ -211,7 +211,7 @@ const Bookings = ({ token }) => {
 							</span>
 						)}
 						{facilityFilter !== 'All' && (
-							<span className='px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full'>
+							<span className='px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full'>
 								Facility: {facilityFilter}
 							</span>
 						)}
@@ -275,7 +275,7 @@ const Bookings = ({ token }) => {
 											<span className={`px-2 py-1 text-xs rounded-full ${
 												b.status === 'cancelled' 
 													? 'bg-red-100 text-red-800' 
-													: 'bg-green-100 text-green-800'
+													: 'bg-blue-100 text-blue-800'
 											}`}>
 												{b.status || 'confirmed'}
 											</span>

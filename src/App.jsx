@@ -9,6 +9,8 @@ import Bookings from './pages/Bookings'
 import BranchBookings from './pages/BranchBookings'
 import BranchMembers from './pages/BranchMembers'
 import AdminSettings from './pages/AdminSettings'
+import MediaGallery from './pages/MediaGallery'
+import Banners from './pages/Banners'
 import Login from './components/Login'
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
@@ -54,6 +56,8 @@ const App = () => {
                   <>
                     <Route path='/' element={<Add token={token} />} />
                     <Route path='/add' element={<Add token={token} />} />
+                    <Route path='/banners' element={<Banners token={token} />} />
+                    <Route path='/media' element={<MediaGallery token={token} />} />
                     <Route path='/list' element={<List token={token} />} />
                     <Route path='/orders' element={<Orders token={token} />} />
                     <Route path='/bookings' element={<Bookings token={token} />} />
